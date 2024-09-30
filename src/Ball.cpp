@@ -1,4 +1,3 @@
-// Ball.cpp
 #include "Ball.h"
 #include <cmath>
 #include <iostream>
@@ -13,33 +12,24 @@ void Ball::updatePosition(float dt) {
 }
 
 void Ball::applyGravity(float dt) {
-    const float gravity = 10.81f; // Positive gravity pulls balls down
-    const float airResistance = 0.1f; // Air resistance coefficient
+    const float gravity = 9.81f; // Positive gravity pulls balls down
     vy_ += gravity * dt;
-    vx_ *= (1.0f - airResistance * dt);
-    vy_ *= (1.0f - airResistance * dt);
 }
 
 void Ball::handleCollision(Ball& other) {
     float dx = other.x_ - x_;
     float dy = other.y_ - y_;
-    float distanceSquared = dx * dx + dy * dy;
+    float distance = std::sqrt(dx * dx + dy * dy);
     float minDist = radius_ + other.radius_;
-    float minDistSquared = minDist * minDist;
 
-    if (distanceSquared < minDistSquared) {
-        float distance = std::sqrt(distanceSquared);
-        if (distance == 0.0f) {
-            distance = 0.0001f; // Small epsilon to prevent division by zero
-        }
-
+    if (distance < minDist) {
         // Normal vector
         float nx = dx / distance;
         float ny = dy / distance;
 
         // Relative velocity
-        float rvx = vx_ - other.vx_;
-        float rvy = vy_ - other.vy_;
+        float rvx = other.vx_ - vx_;
+        float rvy = other.vy_ - vy_;
 
         // Velocity along the normal
         float velAlongNormal = rvx * nx + rvy * ny;
@@ -48,11 +38,8 @@ void Ball::handleCollision(Ball& other) {
         if (velAlongNormal > 0)
             return;
 
-        // Coefficient of restitution
-        float e = RESTITUTION;
-
         // Calculate impulse scalar
-        float j = -(1 + e) * velAlongNormal;
+        float j = -(1 + RESTITUTION) * velAlongNormal;
         j /= (1 / mass_ + 1 / other.mass_);
 
         // Apply impulse
@@ -65,18 +52,17 @@ void Ball::handleCollision(Ball& other) {
         other.vy_ += impulsey / other.mass_;
 
         // Position correction to prevent sinking
-        const float percent = 0.2f; // Penetration percentage to correct
+        const float percent = 0.8f; // Penetration percentage to correct
         const float slop = 0.01f;   // Penetration allowance
-        float penetration = minDist - distance;
-        float correctionMagnitude = std::max(penetration - slop, 0.0f) / (1 / mass_ + 1 / other.mass_) * percent;
+        float correction = std::max(distance - minDist, -slop) / (1 / mass_ + 1 / other.mass_) * percent;
 
-        float correctionX = correctionMagnitude * nx;
-        float correctionY = correctionMagnitude * ny;
+        float correctionX = correction * nx;
+        float correctionY = correction * ny;
 
-        x_ += correctionX / mass_;
-        y_ += correctionY / mass_;
-        other.x_ -= correctionX / other.mass_;
-        other.y_ -= correctionY / other.mass_;
+        x_ -= correctionX / mass_;
+        y_ -= correctionY / mass_;
+        other.x_ += correctionX / other.mass_;
+        other.y_ += correctionY / other.mass_;
     }
 }
 

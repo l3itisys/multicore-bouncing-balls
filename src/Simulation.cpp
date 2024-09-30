@@ -3,7 +3,7 @@
 #include <iostream>
 #include <chrono>
 #include <algorithm>
-#include <cmath> // For std::isfinite
+#include <cmath> // Include this for std::isfinite
 
 Simulation::Simulation(int numBalls, float screenWidth, float screenHeight)
     : running_(false), screenWidth_(screenWidth), screenHeight_(screenHeight) {
@@ -49,7 +49,7 @@ const std::vector<std::unique_ptr<Ball>>& Simulation::getBalls() const {
 
 void Simulation::updateLoop() {
     auto previousTime = std::chrono::high_resolution_clock::now();
-    const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
+    const float targetFrameTime = 1.0f / 60.0f; // 60 FPS
 
     while (running_) {
         auto currentTime = std::chrono::high_resolution_clock::now();
@@ -93,3 +93,4 @@ void Simulation::update(float dt) {
          ball->debugLog();
      }
 }
+

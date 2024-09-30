@@ -32,3 +32,4 @@ target_link_libraries(BouncingBallsSimulation
     glfw
     ${GLEW_LIBRARIES}
 )
+

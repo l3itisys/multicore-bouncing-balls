@@ -1,7 +1,4 @@
-// Renderer.cpp
 #include "Renderer.h"
-#include "Simulation.h"
-#include "Ball.h"
 #include <iostream>
 #include <cmath>
 
@@ -17,40 +14,40 @@ Renderer::~Renderer() {
 
 bool Renderer::initialize() {
     if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW\n";
+        std::cerr << "Failed to initialize GLFW" << std::endl;
         return false;
     }
 
     window_ = glfwCreateWindow(windowWidth_, windowHeight_, "Bouncing Balls Simulation", nullptr, nullptr);
     if (!window_) {
-        std::cerr << "Failed to create GLFW window\n";
+        std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return false;
     }
 
     glfwMakeContextCurrent(window_);
 
-    GLenum err = glewInit();
-    if (GLEW_OK != err) {
-        std::cerr << "Failed to initialize GLEW: "
-                  << glewGetErrorString(err) << "\n";
+    glewExperimental = GL_TRUE; // Needed for core profile
+    if (glewInit() != GLEW_OK) {
+        std::cerr << "Failed to initialize GLEW" << std::endl;
         return false;
     }
 
     glViewport(0, 0, windowWidth_, windowHeight_);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0, windowWidth_, screenHeight_, 0, -1, 1); // Origin at top-left corner
+    glOrtho(0, windowWidth_, windowHeight_, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
 
     return true;
 }
 
 void Renderer::render(const Simulation& simulation) {
     glClear(GL_COLOR_BUFFER_BIT);
+    glLoadIdentity();
 
     const auto& balls = simulation.getBalls();
+
     for (const auto& ball : balls) {
         renderBall(*ball);
     }
@@ -60,27 +57,29 @@ void Renderer::render(const Simulation& simulation) {
 }
 
 void Renderer::renderBall(const Ball& ball) {
-    // Convert integer color to RGB components
+    float x = ball.getX();
+    float y = ball.getY();
+    float radius = ball.getRadius();
     int color = ball.getColor();
+
     float r = ((color >> 16) & 0xFF) / 255.0f;
     float g = ((color >> 8) & 0xFF) / 255.0f;
     float b = (color & 0xFF) / 255.0f;
 
     glColor3f(r, g, b);
-
-    float x = ball.getX();
-    float y = ball.getY();
-    float radius = ball.getRadius();
-
-    const int segments = 20;
     glBegin(GL_TRIANGLE_FAN);
     glVertex2f(x, y);
-    for (int n = 0; n <= segments; ++n) {
-        float angle = n * 2.0f * M_PI / segments;
-        float dx = radius * cosf(angle);
-        float dy = radius * sinf(angle);
-        glVertex2f(x + dx, y + dy);
+    for (int i = 0; i <= 360; i += 10) {
+        float radian = i * 3.14159f / 180.0f;
+        glVertex2f(x + cos(radian) * radius, y + sin(radian) * radius);
     }
+    glEnd();
+
+    // Optional: Draw velocity vector
+    glColor3f(1.0f, 1.0f, 1.0f); // White color for velocity vector
+    glBegin(GL_LINES);
+    glVertex2f(x, y);
+    glVertex2f(x + ball.getVx(), y + ball.getVy());
     glEnd();
 }
 
