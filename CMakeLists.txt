@@ -1,21 +1,34 @@
 cmake_minimum_required(VERSION 3.10)
-project(MulticoreBouncingBallsSim)
+project(BouncingBallsSimulation)
 
-set(CMAKE_CXX_STANDARD 11)
+if(POLICY CMP0072)
+    cmake_policy(SET CMP0072 NEW)
+endif()
 
-# Add source files
-file(GLOB SRC_FILES src/*.cpp)
+set(CMAKE_CXX_STANDARD 17)
+set(OpenGL_GL_PREFERENCE GLVND)
 
-# Include directories
-include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(/usr/include/glm)
-
-# Find packages
 find_package(OpenGL REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
+find_package(GLEW REQUIRED)
 
-# Executable
-add_executable(BouncingBallsSim ${SRC_FILES})
+include_directories(
+    ${OPENGL_INCLUDE_DIRS}
+    ${GLEW_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/include
+)
 
-# Link libraries
-target_link_libraries(BouncingBallsSim PRIVATE OpenGL::GL glfw)
+set(SOURCE_FILES
+    src/main.cpp
+    src/Ball.cpp
+    src/Simulation.cpp
+    src/Renderer.cpp
+)
+
+add_executable(BouncingBallsSimulation ${SOURCE_FILES})
+
+target_link_libraries(BouncingBallsSimulation
+    ${OPENGL_LIBRARIES}
+    glfw
+    ${GLEW_LIBRARIES}
+)
