@@ -49,7 +49,7 @@ const std::vector<std::unique_ptr<Ball>>& Simulation::getBalls() const {
 
 void Simulation::updateLoop() {
     auto previousTime = std::chrono::high_resolution_clock::now();
-    const float targetFrameTime = 1.0f / 60.0f; // 60 FPS
+    const float targetFrameTime = 1.0f / 30.0f; // 60 FPS
 
     while (running_) {
         auto currentTime = std::chrono::high_resolution_clock::now();
