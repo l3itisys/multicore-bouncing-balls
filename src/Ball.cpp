@@ -53,7 +53,7 @@ void Ball::handleCollision(Ball& other) {
 
         // Position correction to prevent sinking
         const float percent = 0.8f; // Penetration percentage to correct
-        const float slop = 0.01f;   // Penetration allowance
+        const float slop = 0.05f;   // Penetration allowance
         float correction = std::max(distance - minDist, -slop) / (1 / mass_ + 1 / other.mass_) * percent;
 
         float correctionX = correction * nx;

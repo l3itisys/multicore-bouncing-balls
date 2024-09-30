@@ -3,15 +3,16 @@
 #include <iostream>
 #include <chrono>
 #include <algorithm>
-#include <cmath> // Include this for std::isfinite
+#include <cmath>
 
 Simulation::Simulation(int numBalls, float screenWidth, float screenHeight)
     : running_(false), screenWidth_(screenWidth), screenHeight_(screenHeight) {
     std::random_device rd;
     std::mt19937 gen(rd());
+
     std::uniform_real_distribution<float> posX(0, screenWidth);
     std::uniform_real_distribution<float> posY(0, screenHeight);
-    std::uniform_real_distribution<float> vel(-50, 50);
+    std::uniform_real_distribution<float> vel(-100,100);
     std::uniform_real_distribution<float> radiusDist(20, 40);
 
     for (int i = 0; i < numBalls; ++i) {
@@ -49,7 +50,7 @@ const std::vector<std::unique_ptr<Ball>>& Simulation::getBalls() const {
 
 void Simulation::updateLoop() {
     auto previousTime = std::chrono::high_resolution_clock::now();
-    const float targetFrameTime = 1.0f / 30.0f; // 60 FPS
+    const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
 
     while (running_) {
         auto currentTime = std::chrono::high_resolution_clock::now();
