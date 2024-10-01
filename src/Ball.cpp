@@ -16,7 +16,7 @@ void Ball::applyGravity(float dt) {
     vy_ += gravity * dt;
 }
 
-void Ball::handleCollision(Ball& other) {
+ oid Ball::handleCollision(Ball& other) {
     float dx = other.x_ - x_;
     float dy = other.y_ - y_;
     float distance = std::sqrt(dx * dx + dy * dy);
