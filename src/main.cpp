@@ -3,7 +3,7 @@
 #include <iostream>
 
 int main() {
-    const int numBalls = 50;
+    const int numBalls = 10;
     const float screenWidth = 1400.0f;
     const float screenHeight = 900.0f;
 
