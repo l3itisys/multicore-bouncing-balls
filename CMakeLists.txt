@@ -1,34 +1,29 @@
 cmake_minimum_required(VERSION 3.10)
 project(BouncingBallsSimulation)
 
-set(CMAKE_CXX_STANDARD 17)
-set(OpenGL_GL_PREFERENCE GLVND)
-
-find_package(OpenGL REQUIRED)
-find_package(glfw3 3.3 REQUIRED)
-find_package(GLEW REQUIRED)
 find_package(TBB REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(GLM REQUIRED)
 
-include_directories(
-    ${OPENGL_INCLUDE_DIRS}
-    ${GLEW_INCLUDE_DIRS}
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+add_executable(BouncingBallsSimulation
+    main.cpp
+    Simulation.cpp
+    Ball.cpp
+    Renderer.cpp
+)
+
+target_include_directories(BouncingBallsSimulation PRIVATE
     ${TBB_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/include
+    ${OPENGL_INCLUDE_DIR}
 )
 
-set(SOURCE_FILES
-    src/main.cpp
-    src/Ball.cpp
-    src/Simulation.cpp
-    src/Renderer.cpp
-)
-
-add_executable(BouncingBallsSimulation ${SOURCE_FILES})
-
-target_link_libraries(BouncingBallsSimulation
-    ${OPENGL_LIBRARIES}
+target_link_libraries(BouncingBallsSimulation PRIVATE
+    ${TBB_IMPORTED_TARGETS}
+    ${OPENGL_gl_LIBRARY}
     glfw
-    ${GLEW_LIBRARIES}
-    TBB::tbb
+    GLEW::GLEW
 )
 

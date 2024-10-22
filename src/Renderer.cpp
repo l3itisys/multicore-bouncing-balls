@@ -1,89 +1,101 @@
 #include "Renderer.h"
 #include <iostream>
-#include <cmath>
 
-Renderer::Renderer(int windowWidth, int windowHeight)
-    : window_(nullptr), windowWidth_(windowWidth), windowHeight_(windowHeight) {}
+Renderer::Renderer(int width, int height)
+    : window_(nullptr), width_(width), height_(height) {}
 
 Renderer::~Renderer() {
     if (window_) {
         glfwDestroyWindow(window_);
-        glfwTerminate();
     }
+    glfwTerminate();
 }
 
 bool Renderer::initialize() {
     if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
+        std::cerr << "Failed to initialize GLFW\n";
         return false;
     }
 
-    window_ = glfwCreateWindow(windowWidth_, windowHeight_, "Bouncing Balls Simulation", nullptr, nullptr);
+    window_ = glfwCreateWindow(width_, height_, "Bouncing Balls Simulation", nullptr, nullptr);
     if (!window_) {
-        std::cerr << "Failed to create GLFW window" << std::endl;
+        std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
         return false;
     }
 
     glfwMakeContextCurrent(window_);
 
-    glewExperimental = GL_TRUE; // Needed for core profile
-    if (glewInit() != GLEW_OK) {
-        std::cerr << "Failed to initialize GLEW" << std::endl;
+    glewExperimental = GL_TRUE;
+    GLenum err = glewInit();
+    if (err != GLEW_OK) {
+        std::cerr << "Failed to initialize GLEW: "
+                  << glewGetErrorString(err) << "\n";
         return false;
     }
 
-    glViewport(0, 0, windowWidth_, windowHeight_);
+    glViewport(0, 0, width_, height_);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0, windowWidth_, windowHeight_, 0, -1, 1);
+    glOrtho(0, width_, height_, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     return true;
 }
 
-void Renderer::render(const Simulation& simulation) {
+void Renderer::render(const std::vector<std::tuple<float, float, float, int>>& renderingData) {
+    glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
-    glLoadIdentity();
 
-    const auto& balls = simulation.getBalls();
-
-    for (const auto& ball : balls) {
-        renderBall(*ball);
+    for (const auto& data : renderingData) {
+        float x, y, radius;
+        int color;
+        std::tie(x, y, radius, color) = data;
+        drawBall(x, y, radius, color);
     }
 
     glfwSwapBuffers(window_);
     glfwPollEvents();
 }
 
-void Renderer::renderBall(const Ball& ball) {
-    float x = ball.getX();
-    float y = ball.getY();
-    float radius = ball.getRadius();
-    int color = ball.getColor();
+void Renderer::drawBall(float x, float y, float radius, int color) {
+    glPushMatrix();
+    glTranslatef(x, y, 0);
 
+    // Convert color integer to RGBA
     float r = ((color >> 16) & 0xFF) / 255.0f;
     float g = ((color >> 8) & 0xFF) / 255.0f;
     float b = (color & 0xFF) / 255.0f;
+    float a = 0.5f; // Transparency
 
-    glColor3f(r, g, b);
+    glColor4f(r, g, b, a);
+
+    int numSegments = 36;
     glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(x, y);
-    for (int i = 0; i <= 360; i += 10) {
-        float radian = i * 3.14159f / 180.0f;
-        glVertex2f(x + cos(radian) * radius, y + sin(radian) * radius);
+    glVertex2f(0, 0);
+    for (int i = 0; i <= numSegments; ++i) {
+        float angle = i * 2.0f * 3.1415926f / numSegments;
+        float dx = cosf(angle) * radius;
+        float dy = sinf(angle) * radius;
+        glVertex2f(dx, dy);
     }
     glEnd();
 
-    // Optional: Draw velocity vector
-    glColor3f(1.0f, 1.0f, 1.0f); // White color for velocity vector
-    glBegin(GL_LINES);
-    glVertex2f(x, y);
-    glVertex2f(x + ball.getVx(), y + ball.getVy());
-    glEnd();
+    glPopMatrix();
 }
 
-bool Renderer::shouldClose() const {
+bool Renderer::shouldClose() {
     return glfwWindowShouldClose(window_);
+}
+
+int Renderer::getWidth() const {
+    return width_;
+}
+
+int Renderer::getHeight() const {
+    return height_;
 }
 

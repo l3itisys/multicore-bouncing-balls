@@ -1,25 +1,29 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#include "Simulation.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <vector>
+#include <tuple>
 
 class Renderer {
 public:
-    Renderer(int windowWidth, int windowHeight);
+    Renderer(int width, int height);
     ~Renderer();
 
     bool initialize();
-    void render(const Simulation& simulation);
-    bool shouldClose() const;
+    void render(const std::vector<std::tuple<float, float, float, int>>& renderingData);
+    bool shouldClose();
+
+    int getWidth() const;
+    int getHeight() const;
 
 private:
-    void renderBall(const Ball& ball);
-
     GLFWwindow* window_;
-    int windowWidth_;
-    int windowHeight_;
+    int width_;
+    int height_;
+
+    void drawBall(float x, float y, float radius, int color);
 };
 
 #endif // RENDERER_H
