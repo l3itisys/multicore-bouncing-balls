@@ -4,26 +4,30 @@
 #include "Ball.h"
 #include <vector>
 #include <memory>
-#include <thread>
-#include <atomic>
+#include <mutex>
 
 class Simulation {
 public:
     Simulation(int numBalls, float screenWidth, float screenHeight);
     ~Simulation();
 
-    void start();
-    void stop();
+    void update(float dt);
     const std::vector<std::unique_ptr<Ball>>& getBalls() const;
 
 private:
-    void updateLoop();
-    void update(float dt);
+    void assignBallsToGrid();
+    void checkCollisionsInCell(int cellX, int cellY);
+    void handleCollisionBetween(Ball& ballA, Ball& ballB);
 
-    std::atomic<bool> running_;
     float screenWidth_, screenHeight_;
     std::vector<std::unique_ptr<Ball>> balls_;
-    std::thread simulationThread_;
+
+    // Grid parameters for spatial partitioning
+    float cellSize_;
+    int gridWidth_;
+    int gridHeight_;
+    std::vector<std::vector<std::vector<Ball*>>> grid_; // 2D grid of cells containing pointers to balls
+    std::vector<std::vector<std::unique_ptr<std::mutex>>> cellMutexes_;  // Mutexes for each cell
 };
 
 #endif // SIMULATION_H

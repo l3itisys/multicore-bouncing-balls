@@ -22,8 +22,6 @@ public:
     int getId() const;
     std::mutex& getMutex();
 
-    void debugLog() const;
-
 private:
     int id_;
     float radius_;

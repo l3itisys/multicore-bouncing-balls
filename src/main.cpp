@@ -1,6 +1,8 @@
 #include "Simulation.h"
 #include "Renderer.h"
 #include <iostream>
+#include <chrono>
+#include <thread>
 
 int main() {
     const int numBalls = 10;
@@ -15,13 +17,25 @@ int main() {
         return -1;
     }
 
-    simulation.start();
+    // Simulation loop variables
+    auto previousTime = std::chrono::high_resolution_clock::now();
+    const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
 
     while (!renderer.shouldClose()) {
-        renderer.render(simulation);
-    }
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float dt = std::chrono::duration<float>(currentTime - previousTime).count();
+        previousTime = currentTime;
 
-    simulation.stop();
+        simulation.update(dt);      // Control thread for the update
+        renderer.render(simulation); // Control thread handles rendering
+
+        // Sleep to maintain target frame rate
+        auto frameDuration = std::chrono::high_resolution_clock::now() - currentTime;
+        auto sleepTime = std::chrono::duration<float>(targetFrameTime - frameDuration.count());
+        if (sleepTime.count() > 0) {
+            std::this_thread::sleep_for(sleepTime);
+        }
+    }
 
     return 0;
 }

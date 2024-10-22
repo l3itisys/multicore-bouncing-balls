@@ -1,6 +1,5 @@
 #include "Ball.h"
 #include <cmath>
-#include <iostream>
 #include <algorithm>
 
 Ball::Ball(int id, float radius, float mass, float x, float y, float vx, float vy, int color)
@@ -17,6 +16,9 @@ void Ball::applyGravity(float dt) {
 }
 
 void Ball::handleCollision(Ball& other) {
+    // Locking is handled in Simulation::handleCollisionBetween()
+    // This function assumes the locks are already held
+
     float dx = other.x_ - x_;
     float dy = other.y_ - y_;
     float distance = std::sqrt(dx * dx + dy * dy);
@@ -92,10 +94,6 @@ float Ball::getRadius() const { return radius_; }
 float Ball::getMass() const { return mass_; }
 int Ball::getColor() const { return color_; }
 int Ball::getId() const { return id_; }
-std::mutex& Ball::getMutex() { return mutex_; }
 
-void Ball::debugLog() const {
-    std::cout << "Ball " << id_ << ": pos(" << x_ << ", " << y_
-              << ") vel(" << vx_ << ", " << vy_ << ")" << std::endl;
-}
+std::mutex& Ball::getMutex() { return mutex_; }
 
