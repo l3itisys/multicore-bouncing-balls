@@ -3,50 +3,63 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <algorithm>
 
 int main(int argc, char* argv[]) {
-    int numBalls = 5; // Default number of balls
-    if (argc > 1) {
-        numBalls = std::clamp(std::stoi(argv[1]), 3, 10);
-    }
-
     const int screenWidth = 1400;
     const int screenHeight = 900;
 
-    Simulation simulation(numBalls, static_cast<float>(screenWidth), static_cast<float>(screenHeight));
-    Renderer renderer(screenWidth, screenHeight);
-
-    if (!renderer.initialize()) {
-        std::cerr << "Failed to initialize renderer" << std::endl;
-        return -1;
-    }
-
-    simulation.start();
-
-    const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
-
-    while (!renderer.shouldClose()) {
-        auto frameStartTime = std::chrono::high_resolution_clock::now();
-
-        // Update simulation
-        simulation.update();
-
-        // Collect rendering data
-        std::vector<std::tuple<float, float, float, int>> renderingData;
-        simulation.getRenderingData(renderingData);
-
-        // Render
-        renderer.render(renderingData);
-
-        // Maintain target frame rate
-        auto frameDuration = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - frameStartTime).count();
-        float sleepTime = targetFrameTime - frameDuration;
-        if (sleepTime > 0.0f) {
-            std::this_thread::sleep_for(std::chrono::duration<float>(sleepTime));
+    // Get number of balls from command line or use default
+    int numBalls = 5;
+    if (argc > 1) {
+        try {
+            numBalls = std::clamp(std::stoi(argv[1]), 3, 10);
+        } catch (const std::exception& e) {
+            std::cerr << "Invalid input. Using default 5 balls.\n";
         }
     }
 
-    simulation.stop();
+    try {
+        // Initialize simulation and renderer
+        Simulation simulation(numBalls, static_cast<float>(screenWidth),
+                            static_cast<float>(screenHeight));
+        Renderer renderer(screenWidth, screenHeight);
+
+        if (!renderer.initialize()) {
+            std::cerr << "Failed to initialize renderer\n";
+            return -1;
+        }
+
+        // Main loop
+        const float targetFrameTime = 1.0f / 30.0f; // 30 FPS as per requirements
+        const float dt = 1.0f / 60.0f; // Simulation timestep
+        std::vector<Ball*> balls;
+
+        while (!renderer.shouldClose()) {
+            auto frameStart = std::chrono::high_resolution_clock::now();
+
+            // Update simulation
+            simulation.update(dt);
+
+            // Get ball data for rendering
+            simulation.getRenderingData(balls);
+
+            // Render
+            renderer.render(balls);
+
+            // Maintain 30 FPS
+            auto frameEnd = std::chrono::high_resolution_clock::now();
+            float frameTime = std::chrono::duration<float>(frameEnd - frameStart).count();
+            if (frameTime < targetFrameTime) {
+                std::this_thread::sleep_for(std::chrono::duration<float>(
+                    targetFrameTime - frameTime));
+            }
+        }
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return -1;
+    }
 
     return 0;
 }

@@ -2,6 +2,7 @@
 #define SIMULATION_H
 
 #include "Ball.h"
+#include "Grid.h"
 #include <vector>
 #include <memory>
 
@@ -12,15 +13,13 @@ public:
 
     void start();
     void stop();
-
-    void update();
-
-    void getRenderingData(std::vector<std::tuple<float, float, float, int>>& renderingData);
+    void update(float dt);
+    void getRenderingData(std::vector<Ball*>& balls);
 
 private:
     float screenWidth_, screenHeight_;
+    Grid grid_;
     std::vector<std::unique_ptr<Ball>> balls_;
-    std::vector<Ball*> ballPointers_; // For collision detection
 };
 
 #endif // SIMULATION_H

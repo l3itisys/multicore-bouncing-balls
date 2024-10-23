@@ -1,99 +1,66 @@
 #include "Ball.h"
+#include "Grid.h"
 #include <cmath>
 #include <algorithm>
-#include <thread>
 
-constexpr float GRAVITY = 9.81f;
-constexpr float RESTITUTION = 0.9f;
+constexpr float GRAVITY = 400.0f;
+constexpr float RESTITUTION = 0.8f;
 
-Ball::Ball(int id, float radius, float mass, float x, float y, float vx, float vy, int color)
-    : id_(id), radius_(radius), mass_(mass), x_(x), y_(y), vx_(vx), vy_(vy), color_(color),
-      running_(false), updateReady_(false), proceed_(false), allBalls_(nullptr) {}
-
-void Ball::start() {
-    running_ = true;
-    arena_.enqueue([this] { run(); });
-}
-
-void Ball::stop() {
-    running_ = false;
-    proceed_ = true;
-}
-
-void Ball::run() {
-    while (running_) {
-        // Wait for control thread to signal proceed
-        while (!proceed_.load(std::memory_order_acquire)) {
-            std::this_thread::yield();
-        }
-        proceed_.store(false, std::memory_order_release);
-
-        // Apply gravity
-        vy_.fetch_and_add(GRAVITY * (1.0f / 30.0f));
-
-        // Update position
-        updatePosition(1.0f / 30.0f);
-
-        // Check for collisions
-        if (allBalls_) {
-            checkCollisionWithBoundary(1400.0f, 900.0f); // Screen dimensions hardcoded for simplicity
-            checkCollisionWithBalls(*allBalls_);
-        }
-
-        // Signal that update is ready
-        updateReady_.store(true, std::memory_order_release);
-    }
-}
+Ball::Ball(int id, float radius, float mass, float x, float y, float vx, float vy,
+           int color, Grid& grid, float screenWidth, float screenHeight)
+    : id_(id), radius_(radius), mass_(mass), x_(x), y_(y), vx_(vx), vy_(vy),
+      color_(color), grid_(grid), screenWidth_(screenWidth), screenHeight_(screenHeight) {}
 
 void Ball::updatePosition(float dt) {
-    x_.fetch_and_add(vx_.load() * dt);
-    y_.fetch_and_add(vy_.load() * dt);
+    vy_ += GRAVITY * dt;
+
+    float newX = x_ + vx_ * dt;
+    float newY = y_ + vy_ * dt;
+
+    if (newX - radius_ < 0) {
+        newX = radius_;
+        vx_ = std::abs(vx_) * RESTITUTION;
+    } else if (newX + radius_ > screenWidth_) {
+        newX = screenWidth_ - radius_;
+        vx_ = -std::abs(vx_) * RESTITUTION;
+    }
+
+    if (newY - radius_ < 0) {
+        newY = radius_;
+        vy_ = std::abs(vy_) * RESTITUTION;
+    } else if (newY + radius_ > screenHeight_) {
+        newY = screenHeight_ - radius_;
+        vy_ = -std::abs(vy_) * RESTITUTION;
+    }
+
+    x_ = newX;
+    y_ = newY;
+
+    const float DAMPING = 0.999f;
+    vx_ *= DAMPING;
+    vy_ *= DAMPING;
 }
 
-void Ball::checkCollisionWithBoundary(float screenWidth, float screenHeight) {
-    float x = x_.load();
-    float y = y_.load();
-    float vx = vx_.load();
-    float vy = vy_.load();
+void Ball::detectCollisions() {
+    std::vector<Ball*> potentialCollisions;
+    grid_.getPotentialCollisions(this, potentialCollisions);
 
-    bool collision = false;
-
-    if (x - radius_ < 0) {
-        x = radius_;
-        vx = std::abs(vx) * RESTITUTION;
-        collision = true;
-    } else if (x + radius_ > screenWidth) {
-        x = screenWidth - radius_;
-        vx = -std::abs(vx) * RESTITUTION;
-        collision = true;
-    }
-
-    if (y - radius_ < 0) {
-        y = radius_;
-        vy = std::abs(vy) * RESTITUTION;
-        collision = true;
-    } else if (y + radius_ > screenHeight) {
-        y = screenHeight - radius_;
-        vy = -std::abs(vy) * RESTITUTION;
-        collision = true;
-    }
-
-    if (collision) {
-        x_.store(x);
-        y_.store(y);
-        vx_.store(vx);
-        vy_.store(vy);
-    }
-}
-
-void Ball::checkCollisionWithBalls(const std::vector<Ball*>& balls) {
-    for (Ball* other : balls) {
+    for (Ball* other : potentialCollisions) {
         if (other->getId() == id_) continue;
 
-        float dx = other->getX() - x_.load();
-        float dy = other->getY() - y_.load();
+        // Ensure consistent locking order to prevent deadlocks
+        Ball* first = this;
+        Ball* second = other;
+        if (other->getId() < id_) {
+            std::swap(first, second);
+        }
+
+        std::scoped_lock lock(first->mtx_, second->mtx_);
+
+        float dx = other->x_ - x_;
+        float dy = other->y_ - y_;
         float distanceSquared = dx * dx + dy * dy;
-        float minDist = radius_ + other->getRadius();
+        float minDist = radius_ + other->radius_;
 
         if (distanceSquared < minDist * minDist) {
             float distance = std::sqrt(distanceSquared);
@@ -103,88 +70,50 @@ void Ball::checkCollisionWithBalls(const std::vector<Ball*>& balls) {
                 dy = 0.0f;
                 distance = minDist;
             }
-
-            // Normal vector
             float nx = dx / distance;
             float ny = dy / distance;
 
-            // Relative velocity
-            float rvx = other->getVx() - vx_.load();
-            float rvy = other->getVy() - vy_.load();
+            float relativeVx = vx_ - other->vx_;
+            float relativeVy = vy_ - other->vy_;
+            float relativeSpeed = relativeVx * nx + relativeVy * ny;
 
-            // Velocity along the normal
-            float velAlongNormal = rvx * nx + rvy * ny;
+            if (relativeSpeed < 0) {
+                // Calculate impulse scalar
+                float e = RESTITUTION;
+                float j = -(1 + e) * relativeSpeed;
+                j /= (1 / mass_) + (1 / other->mass_);
 
-            // Do not resolve if velocities are separating
-            if (velAlongNormal > 0)
-                continue;
+                // Apply impulse to both balls
+                float impulseX = j * nx;
+                float impulseY = j * ny;
 
-            // Calculate impulse scalar
-            float e = RESTITUTION;
-            float j = -(1 + e) * velAlongNormal;
-            j /= (1 / mass_) + (1 / other->getMass());
+                vx_ += impulseX / mass_;
+                vy_ += impulseY / mass_;
+                other->vx_ -= impulseX / other->mass_;
+                other->vy_ -= impulseY / other->mass_;
 
-            // Apply impulse
-            float impulsex = j * nx;
-            float impulsey = j * ny;
-
-            vx_.fetch_and_sub(impulsex / mass_);
-            vy_.fetch_and_sub(impulsey / mass_);
-
-            // For the other ball
-            other->vx_.fetch_and_add(impulsex / other->getMass());
-            other->vy_.fetch_and_add(impulsey / other->getMass());
+                // Correct positions to prevent overlapping
+                float overlap = (minDist - distance) / 2.0f;
+                x_ -= nx * overlap;
+                y_ -= ny * overlap;
+                other->x_ += nx * overlap;
+                other->y_ += ny * overlap;
+            }
         }
     }
 }
 
-void Ball::waitForUpdate() {
-    while (!updateReady_.load(std::memory_order_acquire)) {
-        std::this_thread::yield();
-    }
-    updateReady_.store(false, std::memory_order_release);
-}
-
-void Ball::signalUpdate() {
-    proceed_.store(true, std::memory_order_release);
-}
-
-float Ball::getX() const {
-    return x_.load();
-}
-
-float Ball::getY() const {
-    return y_.load();
-}
-
-float Ball::getRadius() const {
-    return radius_;
-}
-
-int Ball::getColor() const {
-    return color_;
-}
-
-int Ball::getId() const {
-    return id_;
+void Ball::getPosition(float& x, float& y) const {
+    std::lock_guard<std::mutex> lock(mtx_);
+    x = x_;
+    y = y_;
 }
 
 float Ball::getVx() const {
-    return vx_.load();
+    return vx_;
 }
 
 float Ball::getVy() const {
-    return vy_.load();
-}
-
-float Ball::getMass() const {
-    return mass_;
-}
-
-void Ball::getRenderingData(float& x, float& y, float& radius, int& color) const {
-    x = x_.load();
-    y = y_.load();
-    radius = radius_;
-    color = color_;
+    return vy_;
 }
 

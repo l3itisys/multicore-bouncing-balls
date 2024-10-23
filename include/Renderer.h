@@ -4,26 +4,26 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <vector>
-#include <tuple>
+#include "Ball.h"
 
 class Renderer {
 public:
     Renderer(int width, int height);
     ~Renderer();
+    Renderer(const Renderer&) = delete;
+    Renderer& operator=(const Renderer&) = delete;
 
     bool initialize();
-    void render(const std::vector<std::tuple<float, float, float, int>>& renderingData);
+    void render(const std::vector<Ball*>& balls);
     bool shouldClose();
-
-    int getWidth() const;
-    int getHeight() const;
+    int getWidth() const { return width_; }
+    int getHeight() const { return height_; }
 
 private:
     GLFWwindow* window_;
     int width_;
     int height_;
-
-    void drawBall(float x, float y, float radius, int color);
+    void drawFilledCircle(float x, float y, float radius, const float* color);
 };
 
 #endif // RENDERER_H

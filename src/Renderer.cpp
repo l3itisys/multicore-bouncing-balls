@@ -1,5 +1,6 @@
 #include "Renderer.h"
 #include <iostream>
+#include <cmath>
 
 Renderer::Renderer(int width, int height)
     : window_(nullptr), width_(width), height_(height) {}
@@ -13,89 +14,81 @@ Renderer::~Renderer() {
 
 bool Renderer::initialize() {
     if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW\n";
         return false;
     }
 
+    glfwWindowHint(GLFW_SAMPLES, 4); // Enable multisampling
     window_ = glfwCreateWindow(width_, height_, "Bouncing Balls Simulation", nullptr, nullptr);
     if (!window_) {
-        std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
         return false;
     }
 
     glfwMakeContextCurrent(window_);
 
-    glewExperimental = GL_TRUE;
-    GLenum err = glewInit();
-    if (err != GLEW_OK) {
-        std::cerr << "Failed to initialize GLEW: "
-                  << glewGetErrorString(err) << "\n";
+    glewExperimental = GL_TRUE; // Ensure GLEW uses modern techniques
+    if (glewInit() != GLEW_OK) {
+        std::cerr << "Failed to initialize GLEW\n";
         return false;
     }
+
+    glEnable(GL_MULTISAMPLE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glViewport(0, 0, width_, height_);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0, width_, height_, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     return true;
 }
 
-void Renderer::render(const std::vector<std::tuple<float, float, float, int>>& renderingData) {
-    glClearColor(0, 0, 0, 1);
+void Renderer::render(const std::vector<Ball*>& balls) {
     glClear(GL_COLOR_BUFFER_BIT);
+    glLoadIdentity();
 
-    for (const auto& data : renderingData) {
-        float x, y, radius;
-        int color;
-        std::tie(x, y, radius, color) = data;
-        drawBall(x, y, radius, color);
+    for (const Ball* ball : balls) {
+        float x, y;
+        ball->getPosition(x, y);
+
+        int color = ball->getColor();
+        float colorArray[4] = {
+            ((color >> 16) & 0xFF) / 255.0f,
+            ((color >> 8) & 0xFF) / 255.0f,
+            (color & 0xFF) / 255.0f,
+            0.5f // Set alpha to 0.5 for transparency
+        };
+
+        drawFilledCircle(x, y, ball->getRadius(), colorArray);
     }
 
     glfwSwapBuffers(window_);
     glfwPollEvents();
 }
 
-void Renderer::drawBall(float x, float y, float radius, int color) {
-    glPushMatrix();
-    glTranslatef(x, y, 0);
+void Renderer::drawFilledCircle(float x, float y, float radius, const float* color) {
+    const int numSegments = 32;
+    const float angleStep = 2.0f * M_PI / numSegments;
 
-    // Convert color integer to RGBA
-    float r = ((color >> 16) & 0xFF) / 255.0f;
-    float g = ((color >> 8) & 0xFF) / 255.0f;
-    float b = (color & 0xFF) / 255.0f;
-    float a = 0.5f; // Transparency
-
-    glColor4f(r, g, b, a);
-
-    int numSegments = 36;
+    glColor4fv(color);
     glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0, 0);
-    for (int i = 0; i <= numSegments; ++i) {
-        float angle = i * 2.0f * 3.1415926f / numSegments;
-        float dx = cosf(angle) * radius;
-        float dy = sinf(angle) * radius;
-        glVertex2f(dx, dy);
-    }
-    glEnd();
+    glVertex2f(x, y);
 
-    glPopMatrix();
+    for (int i = 0; i <= numSegments; ++i) {
+        float angle = i * angleStep;
+        float px = x + radius * cosf(angle);
+        float py = y + radius * sinf(angle);
+        glVertex2f(px, py);
+    }
+
+    glEnd();
 }
 
 bool Renderer::shouldClose() {
     return glfwWindowShouldClose(window_);
-}
-
-int Renderer::getWidth() const {
-    return width_;
-}
-
-int Renderer::getHeight() const {
-    return height_;
 }
 
