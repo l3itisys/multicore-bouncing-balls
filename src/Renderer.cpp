@@ -47,7 +47,7 @@ bool Renderer::initialize() {
     return true;
 }
 
-void Renderer::render(const std::vector<Ball*>& balls) {
+void Renderer::render(const tbb::concurrent_vector<Ball*>& balls) {
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadIdentity();
 

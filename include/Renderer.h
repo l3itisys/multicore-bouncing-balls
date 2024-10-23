@@ -3,6 +3,7 @@
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <tbb/concurrent_vector.h>
 #include <vector>
 #include "Ball.h"
 
@@ -14,7 +15,7 @@ public:
     Renderer& operator=(const Renderer&) = delete;
 
     bool initialize();
-    void render(const std::vector<Ball*>& balls);
+    void render(const tbb::concurrent_vector<Ball*>& balls);
     bool shouldClose();
     int getWidth() const { return width_; }
     int getHeight() const { return height_; }
