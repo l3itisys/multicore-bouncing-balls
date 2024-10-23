@@ -39,7 +39,7 @@ private:
     const float screenWidth_;
     const float screenHeight_;
 
-    static constexpr float RESTITUTION = 0.8f;
+    static constexpr float RESTITUTION = 1.0f;
 };
 
 #endif // BALL_H

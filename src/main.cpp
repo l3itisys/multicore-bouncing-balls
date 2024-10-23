@@ -3,13 +3,13 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
-#include <algorithm>
+#include <tbb/parallel_for.h>
 
 int main(int argc, char* argv[]) {
     const int screenWidth = 1400;
     const int screenHeight = 900;
 
-    // Get number of balls from command line or use default
+    // Get number of balls from command line
     int numBalls = 5;
     if (argc > 1) {
         try {
@@ -35,13 +35,12 @@ int main(int argc, char* argv[]) {
 
         // Main loop
         const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
-        std::vector<Ball*> balls;
 
         while (!renderer.shouldClose()) {
             auto frameStart = std::chrono::high_resolution_clock::now();
 
             // Get ball data for rendering
-            simulation.getRenderingData(balls);
+            const tbb::concurrent_vector<Ball*>& balls = simulation.getBalls();
 
             // Render
             renderer.render(balls);

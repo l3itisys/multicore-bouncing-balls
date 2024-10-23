@@ -7,8 +7,7 @@
 #include <memory>
 #include <thread>
 #include <atomic>
-#include <mutex>
-#include <condition_variable>
+#include <tbb/concurrent_vector.h>
 
 class Simulation {
 public:
@@ -18,20 +17,18 @@ public:
     void start();
     void stop();
     void update(float dt);
-    void getRenderingData(std::vector<Ball*>& balls);
+    const tbb::concurrent_vector<Ball*>& getBalls() const;
 
 private:
     void simulationLoop();
 
     float screenWidth_, screenHeight_;
     Grid grid_;
-    std::vector<std::unique_ptr<Ball>> balls_;
+    std::vector<std::unique_ptr<Ball>> ballsStorage_; // Unique ownership
+    tbb::concurrent_vector<Ball*> balls_;             // Thread-safe access
     std::thread simulationThread_;
     std::atomic<bool> running_;
-    std::mutex dataMutex_;
-    std::condition_variable cv_;
     float dt_;
-    bool dataReady_;
 };
 
 #endif // SIMULATION_H
