@@ -26,7 +26,7 @@ bool Renderer::initialize() {
 
     glfwMakeContextCurrent(window_);
 
-    glewExperimental = GL_TRUE; // Ensure GLEW uses modern techniques
+    glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) {
         std::cerr << "Failed to initialize GLEW\n";
         return false;

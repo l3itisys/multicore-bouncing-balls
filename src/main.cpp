@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     try {
         // Initialize simulation and renderer
         Simulation simulation(numBalls, static_cast<float>(screenWidth),
-                            static_cast<float>(screenHeight));
+                              static_cast<float>(screenHeight));
         Renderer renderer(screenWidth, screenHeight);
 
         if (!renderer.initialize()) {
@@ -30,16 +30,15 @@ int main(int argc, char* argv[]) {
             return -1;
         }
 
+        // Start simulation thread
+        simulation.start();
+
         // Main loop
-        const float targetFrameTime = 1.0f / 30.0f; // 30 FPS as per requirements
-        const float dt = 1.0f / 60.0f; // Simulation timestep
+        const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
         std::vector<Ball*> balls;
 
         while (!renderer.shouldClose()) {
             auto frameStart = std::chrono::high_resolution_clock::now();
-
-            // Update simulation
-            simulation.update(dt);
 
             // Get ball data for rendering
             simulation.getRenderingData(balls);
@@ -47,7 +46,7 @@ int main(int argc, char* argv[]) {
             // Render
             renderer.render(balls);
 
-            // Maintain 30 FPS
+            // Control frame rate
             auto frameEnd = std::chrono::high_resolution_clock::now();
             float frameTime = std::chrono::duration<float>(frameEnd - frameStart).count();
             if (frameTime < targetFrameTime) {
@@ -55,6 +54,9 @@ int main(int argc, char* argv[]) {
                     targetFrameTime - frameTime));
             }
         }
+
+        // Stop simulation
+        simulation.stop();
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

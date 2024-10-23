@@ -1,8 +1,6 @@
 #ifndef BALL_H
 #define BALL_H
 
-#include <vector>
-#include <unordered_set>
 #include <mutex>
 
 class Grid;
@@ -15,6 +13,12 @@ public:
     Ball(const Ball&) = delete;
     Ball& operator=(const Ball&) = delete;
 
+    void updatePosition(float dt);
+    void applyGravity(float dt);
+    void checkBoundaryCollision();
+    void detectCollisions();
+    void handleCollision(Ball& other);
+
     void getPosition(float& x, float& y) const;
     float getVx() const;
     float getVy() const;
@@ -22,9 +26,6 @@ public:
     float getMass() const { return mass_; }
     int getColor() const { return color_; }
     int getId() const { return id_; }
-
-    void updatePosition(float dt);
-    void detectCollisions();
 
 private:
     const int id_;
@@ -37,6 +38,8 @@ private:
     Grid& grid_;
     const float screenWidth_;
     const float screenHeight_;
+
+    static constexpr float RESTITUTION = 0.8f;
 };
 
 #endif // BALL_H

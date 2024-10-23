@@ -3,42 +3,38 @@
 #include <cmath>
 #include <algorithm>
 
-constexpr float GRAVITY = 400.0f;
-constexpr float RESTITUTION = 0.8f;
+constexpr float GRAVITY = 9.81f;
 
 Ball::Ball(int id, float radius, float mass, float x, float y, float vx, float vy,
            int color, Grid& grid, float screenWidth, float screenHeight)
     : id_(id), radius_(radius), mass_(mass), x_(x), y_(y), vx_(vx), vy_(vy),
       color_(color), grid_(grid), screenWidth_(screenWidth), screenHeight_(screenHeight) {}
 
-void Ball::updatePosition(float dt) {
+void Ball::applyGravity(float dt) {
     vy_ += GRAVITY * dt;
+}
 
-    float newX = x_ + vx_ * dt;
-    float newY = y_ + vy_ * dt;
+void Ball::updatePosition(float dt) {
+    x_ += vx_ * dt;
+    y_ += vy_ * dt;
+}
 
-    if (newX - radius_ < 0) {
-        newX = radius_;
+void Ball::checkBoundaryCollision() {
+    if (x_ - radius_ < 0) {
+        x_ = radius_;
         vx_ = std::abs(vx_) * RESTITUTION;
-    } else if (newX + radius_ > screenWidth_) {
-        newX = screenWidth_ - radius_;
+    } else if (x_ + radius_ > screenWidth_) {
+        x_ = screenWidth_ - radius_;
         vx_ = -std::abs(vx_) * RESTITUTION;
     }
 
-    if (newY - radius_ < 0) {
-        newY = radius_;
+    if (y_ - radius_ < 0) {
+        y_ = radius_;
         vy_ = std::abs(vy_) * RESTITUTION;
-    } else if (newY + radius_ > screenHeight_) {
-        newY = screenHeight_ - radius_;
+    } else if (y_ + radius_ > screenHeight_) {
+        y_ = screenHeight_ - radius_;
         vy_ = -std::abs(vy_) * RESTITUTION;
     }
-
-    x_ = newX;
-    y_ = newY;
-
-    const float DAMPING = 0.999f;
-    vx_ *= DAMPING;
-    vy_ *= DAMPING;
 }
 
 void Ball::detectCollisions() {
@@ -57,49 +53,66 @@ void Ball::detectCollisions() {
 
         std::scoped_lock lock(first->mtx_, second->mtx_);
 
-        float dx = other->x_ - x_;
-        float dy = other->y_ - y_;
-        float distanceSquared = dx * dx + dy * dy;
-        float minDist = radius_ + other->radius_;
+        // Perform collision handling
+        handleCollision(*other);
+    }
+}
 
-        if (distanceSquared < minDist * minDist) {
-            float distance = std::sqrt(distanceSquared);
-            if (distance == 0.0f) {
-                // Avoid division by zero
-                dx = minDist;
-                dy = 0.0f;
-                distance = minDist;
-            }
-            float nx = dx / distance;
-            float ny = dy / distance;
+void Ball::handleCollision(Ball& other) {
+    // Locking is handled in detectCollisions()
+    float dx = other.x_ - x_;
+    float dy = other.y_ - y_;
+    float distanceSquared = dx * dx + dy * dy;
+    float minDist = radius_ + other.radius_;
 
-            float relativeVx = vx_ - other->vx_;
-            float relativeVy = vy_ - other->vy_;
-            float relativeSpeed = relativeVx * nx + relativeVy * ny;
-
-            if (relativeSpeed < 0) {
-                // Calculate impulse scalar
-                float e = RESTITUTION;
-                float j = -(1 + e) * relativeSpeed;
-                j /= (1 / mass_) + (1 / other->mass_);
-
-                // Apply impulse to both balls
-                float impulseX = j * nx;
-                float impulseY = j * ny;
-
-                vx_ += impulseX / mass_;
-                vy_ += impulseY / mass_;
-                other->vx_ -= impulseX / other->mass_;
-                other->vy_ -= impulseY / other->mass_;
-
-                // Correct positions to prevent overlapping
-                float overlap = (minDist - distance) / 2.0f;
-                x_ -= nx * overlap;
-                y_ -= ny * overlap;
-                other->x_ += nx * overlap;
-                other->y_ += ny * overlap;
-            }
+    if (distanceSquared < minDist * minDist) {
+        float distance = std::sqrt(distanceSquared);
+        if (distance == 0.0f) {
+            // Avoid division by zero
+            dx = minDist;
+            dy = 0.0f;
+            distance = minDist;
         }
+        // Normal vector
+        float nx = dx / distance;
+        float ny = dy / distance;
+
+        // Relative velocity
+        float rvx = other.vx_ - vx_;
+        float rvy = other.vy_ - vy_;
+
+        // Velocity along the normal
+        float velAlongNormal = rvx * nx + rvy * ny;
+
+        // Do not resolve if velocities are separating
+        if (velAlongNormal > 0)
+            return;
+
+        // Calculate impulse scalar
+        float j = -(1 + RESTITUTION) * velAlongNormal;
+        j /= (1 / mass_) + (1 / other.mass_);
+
+        // Apply impulse
+        float impulseX = j * nx;
+        float impulseY = j * ny;
+
+        vx_ -= impulseX / mass_;
+        vy_ -= impulseY / mass_;
+        other.vx_ += impulseX / other.mass_;
+        other.vy_ += impulseY / other.mass_;
+
+        // Position correction to prevent sinking
+        const float percent = 0.8f; // Penetration percentage to correct
+        const float slop = 0.05f;   // Penetration allowance
+        float correction = std::max(minDist - distance, -slop) / (1 / mass_ + 1 / other.mass_) * percent;
+
+        float correctionX = correction * nx;
+        float correctionY = correction * ny;
+
+        x_ -= correctionX / mass_;
+        y_ -= correctionY / mass_;
+        other.x_ += correctionX / other.mass_;
+        other.y_ += correctionY / other.mass_;
     }
 }
 

@@ -5,6 +5,10 @@
 #include "Grid.h"
 #include <vector>
 #include <memory>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
 
 class Simulation {
 public:
@@ -17,9 +21,17 @@ public:
     void getRenderingData(std::vector<Ball*>& balls);
 
 private:
+    void simulationLoop();
+
     float screenWidth_, screenHeight_;
     Grid grid_;
     std::vector<std::unique_ptr<Ball>> balls_;
+    std::thread simulationThread_;
+    std::atomic<bool> running_;
+    std::mutex dataMutex_;
+    std::condition_variable cv_;
+    float dt_;
+    bool dataReady_;
 };
 
 #endif // SIMULATION_H

@@ -46,16 +46,17 @@ void Grid::getPotentialCollisions(Ball* ball, std::vector<Ball*>& potentials) {
 
     // Check neighboring cells
     for (int i = -1; i <= 1; ++i) {
-        for (int j = -1; j <= 1; ++j) {
-            int checkX = cellX + i;
-            int checkY = cellY + j;
+        int checkX = cellX + i;
+        if (checkX < 0 || checkX >= cols_) continue;
 
-            if (checkX >= 0 && checkX < cols_ && checkY >= 0 && checkY < rows_) {
-                std::lock_guard<std::mutex> lock(cells_[checkX][checkY]->mtx);
-                for (Ball* other : cells_[checkX][checkY]->balls) {
-                    if (other != ball) {
-                        potentials.push_back(other);
-                    }
+        for (int j = -1; j <= 1; ++j) {
+            int checkY = cellY + j;
+            if (checkY < 0 || checkY >= rows_) continue;
+
+            std::lock_guard<std::mutex> lock(cells_[checkX][checkY]->mtx);
+            for (Ball* other : cells_[checkX][checkY]->balls) {
+                if (other != ball) {
+                    potentials.push_back(other);
                 }
             }
         }
