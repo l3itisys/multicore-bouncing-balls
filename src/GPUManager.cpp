@@ -118,33 +118,25 @@ void GPUManager::createContext() {
         throw std::runtime_error("No current OpenGL context");
     }
 
-    // OpenGL context properties
-    std::vector<cl_context_properties> properties;
-    
-    // Platform must be the first property
-    properties.push_back(CL_CONTEXT_PLATFORM);
-    properties.push_back((cl_context_properties)(platform)());
-
-    // Then add OpenGL context properties
-    properties.push_back(CL_GL_CONTEXT_KHR);
-    properties.push_back((cl_context_properties)currentWindow);
-
-#ifdef _WIN32
-    properties.push_back(CL_WGL_HDC_KHR);
-    properties.push_back((cl_context_properties)wglGetCurrentDC());
-#elif __APPLE__
-    properties.push_back(CL_CGL_SHAREGROUP_KHR);
-    properties.push_back((cl_context_properties)CGLGetShareGroup(CGLGetCurrentContext()));
-#else // Linux
+    // Get current OpenGL context and display
+#ifdef __linux__
     Display* display = glXGetCurrentDisplay();
-    if (!display) {
-        throw std::runtime_error("Failed to get current X display");
+    GLXContext glxContext = glXGetCurrentContext();
+    
+    if (!display || !glxContext) {
+        throw std::runtime_error("Failed to get GLX context or display");
     }
-    properties.push_back(CL_GLX_DISPLAY_KHR);
-    properties.push_back((cl_context_properties)display);
+    
+    // Set up context properties
+    std::vector<cl_context_properties> properties = {
+        CL_CONTEXT_PLATFORM, (cl_context_properties)(platform)(),
+        CL_GL_CONTEXT_KHR, (cl_context_properties)glxContext,
+        CL_GLX_DISPLAY_KHR, (cl_context_properties)display,
+        0
+    };
+#else
+    #error "Platform not supported"
 #endif
-
-    properties.push_back(0);  // Null terminator
 
     // Debug output
     std::cout << "Creating OpenCL context with properties:" << std::endl;
@@ -152,9 +144,13 @@ void GPUManager::createContext() {
         std::cout << "Property " << properties[i] << ": " << properties[i + 1] << std::endl;
     }
 
-    // Create context with error handling
-    cl_int err;
+    // Create context
+    cl_int err = CL_SUCCESS;
     try {
+        // Make sure OpenGL is done with any commands
+        glFinish();
+        
+        // Create the OpenCL context
         context = cl::Context(
             {device},
             properties.data(),
@@ -164,31 +160,19 @@ void GPUManager::createContext() {
         );
 
         if (err != CL_SUCCESS) {
-            std::string errorMsg = "Failed to create OpenCL context. Error code: " + std::to_string(err);
+            std::stringstream ss;
+            ss << "OpenCL context creation failed (error " << err << "): ";
             switch (err) {
-                case CL_INVALID_PLATFORM:
-                    errorMsg += " (CL_INVALID_PLATFORM)";
-                    break;
-                case CL_INVALID_PROPERTY:
-                    errorMsg += " (CL_INVALID_PROPERTY)";
-                    break;
-                case CL_INVALID_VALUE:
-                    errorMsg += " (CL_INVALID_VALUE)";
-                    break;
-                case CL_INVALID_DEVICE:
-                    errorMsg += " (CL_INVALID_DEVICE)";
-                    break;
-                case CL_DEVICE_NOT_AVAILABLE:
-                    errorMsg += " (CL_DEVICE_NOT_AVAILABLE)";
-                    break;
-                case CL_OUT_OF_RESOURCES:
-                    errorMsg += " (CL_OUT_OF_RESOURCES)";
-                    break;
-                case CL_OUT_OF_HOST_MEMORY:
-                    errorMsg += " (CL_OUT_OF_HOST_MEMORY)";
-                    break;
+                case CL_INVALID_PLATFORM: ss << "CL_INVALID_PLATFORM"; break;
+                case CL_INVALID_PROPERTY: ss << "CL_INVALID_PROPERTY"; break;
+                case CL_INVALID_VALUE: ss << "CL_INVALID_VALUE"; break;
+                case CL_INVALID_DEVICE: ss << "CL_INVALID_DEVICE"; break;
+                case CL_DEVICE_NOT_AVAILABLE: ss << "CL_DEVICE_NOT_AVAILABLE"; break;
+                case CL_OUT_OF_RESOURCES: ss << "CL_OUT_OF_RESOURCES"; break;
+                case CL_OUT_OF_HOST_MEMORY: ss << "CL_OUT_OF_HOST_MEMORY"; break;
+                default: ss << "Unknown error";
             }
-            throw std::runtime_error(errorMsg);
+            throw std::runtime_error(ss.str());
         }
     } catch (const cl::Error& e) {
         std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")" << std::endl;
