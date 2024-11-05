@@ -159,9 +159,9 @@ void GPUManager::createContext() {
         // Make sure OpenGL is done with any commands
         glFinish();
         
-        // Debug: Print current OpenGL context
-        std::cout << "Current GLX Context: " << glXGetCurrentContext() << std::endl;
-        std::cout << "Current Display: " << glXGetCurrentDisplay() << std::endl;
+        // Debug: Print current OpenGL context and properties
+        std::cout << "Current GLX Context: " << std::hex << glXGetCurrentContext() << std::dec << std::endl;
+        std::cout << "Current Display: " << std::hex << glXGetCurrentDisplay() << std::dec << std::endl;
         
         // Create a temporary array of devices
         std::vector<cl_device_id> deviceIds = {device()};
@@ -171,8 +171,23 @@ void GPUManager::createContext() {
                                 size_t cb, void* userData) {
             std::cerr << "OpenCL Context Error: " << errInfo << std::endl;
         };
-        
-        // Create the context using the C API for more control
+
+        // Ensure we have a valid OpenGL context
+        if (!glXGetCurrentContext()) {
+            throw std::runtime_error("No valid OpenGL context");
+        }
+
+        // Ensure properties are properly terminated
+        properties.push_back(0);  // Ensure null termination
+
+        // Print properties for debugging
+        std::cout << "Context properties:" << std::endl;
+        for (size_t i = 0; i < properties.size() - 1; i += 2) {
+            std::cout << std::hex << "  0x" << properties[i] 
+                      << " -> 0x" << properties[i + 1] << std::dec << std::endl;
+        }
+
+        // Create the context using the C API
         cl_context clContext = clCreateContext(
             properties.data(),
             1,
@@ -181,6 +196,12 @@ void GPUManager::createContext() {
             nullptr,
             &err
         );
+
+        if (err != CL_SUCCESS) {
+            std::stringstream ss;
+            ss << "Context creation failed with error " << err;
+            throw cl::Error(err, ss.str().c_str());
+        }
         
         if (err != CL_SUCCESS || !clContext) {
             std::stringstream ss;
