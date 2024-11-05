@@ -141,7 +141,8 @@ void GPUManager::createContext() {
     // Debug output
     std::cout << "Creating OpenCL context with properties:" << std::endl;
     for (size_t i = 0; i < properties.size() - 1; i += 2) {
-        std::cout << "Property " << properties[i] << ": " << properties[i + 1] << std::endl;
+        std::cout << "Property " << std::hex << properties[i] 
+                  << ": 0x" << properties[i + 1] << std::dec << std::endl;
     }
 
     // Create context
@@ -150,14 +151,25 @@ void GPUManager::createContext() {
         // Make sure OpenGL is done with any commands
         glFinish();
         
-        // Create the OpenCL context
-        context = cl::Context(
-            {device},
+        // Create a temporary array of devices
+        std::vector<cl_device_id> deviceIds = {device()};
+        
+        // Create the context using the C API for more control
+        cl_context clContext = clCreateContext(
             properties.data(),
+            1,
+            deviceIds.data(),
             nullptr,
             nullptr,
             &err
         );
+        
+        if (err != CL_SUCCESS || !clContext) {
+            throw cl::Error(err, "Failed to create OpenCL context");
+        }
+        
+        // Wrap the C context in a C++ object
+        context = cl::Context(clContext, true);  // true means retain the context
 
         if (err != CL_SUCCESS) {
             std::stringstream ss;
