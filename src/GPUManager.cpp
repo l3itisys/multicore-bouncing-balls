@@ -99,11 +99,18 @@ void GPUManager::createContext() {
     cl::Platform platform = selectPlatform();
     cl::Device device = selectDevice(platform);
 
+    // Check for OpenGL-OpenCL interop support
+    std::string extensions = device.getInfo<CL_DEVICE_EXTENSIONS>();
+    if (extensions.find("cl_khr_gl_sharing") == std::string::npos) {
+        std::cerr << "Device does not support OpenGL-OpenCL interop (cl_khr_gl_sharing)" << std::endl;
+        throw std::runtime_error("OpenGL-OpenCL interop not supported");
+    }
+
     std::cout << "Using OpenCL device: "
               << device.getInfo<CL_DEVICE_NAME>()
               << " from "
               << platform.getInfo<CL_PLATFORM_VENDOR>()
-              << std::endl;
+              << "\nDevice extensions: " << extensions << std::endl;
 
     // Check if cl_khr_gl_sharing is supported
     std::string extensions = device.getInfo<CL_DEVICE_EXTENSIONS>();
@@ -112,20 +119,40 @@ void GPUManager::createContext() {
     }
 
     // OpenGL context properties
-    cl_context_properties properties[] = {
-        CL_GL_CONTEXT_KHR, (cl_context_properties)glfwGetCurrentContext(),
+    std::vector<cl_context_properties> properties;
+    
+    properties.push_back(CL_GL_CONTEXT_KHR);
+    properties.push_back((cl_context_properties)glfwGetCurrentContext());
+    
 #ifdef _WIN32
-        CL_WGL_HDC_KHR, (cl_context_properties)wglGetCurrentDC(),
+    properties.push_back(CL_WGL_HDC_KHR);
+    properties.push_back((cl_context_properties)wglGetCurrentDC());
 #elif __APPLE__
-        CL_CGL_SHAREGROUP_KHR, (cl_context_properties)CGLGetShareGroup(CGLGetCurrentContext()),
+    properties.push_back(CL_CGL_SHAREGROUP_KHR);
+    properties.push_back((cl_context_properties)CGLGetShareGroup(CGLGetCurrentContext()));
 #else // Linux
-        CL_GLX_DISPLAY_KHR, (cl_context_properties)glXGetCurrentDisplay(),
+    properties.push_back(CL_GLX_DISPLAY_KHR);
+    properties.push_back((cl_context_properties)glXGetCurrentDisplay());
 #endif
-        CL_CONTEXT_PLATFORM, (cl_context_properties)(platform)(),
-        0
-    };
 
-    context = cl::Context(device, properties);
+    properties.push_back(CL_CONTEXT_PLATFORM);
+    properties.push_back((cl_context_properties)(platform)());
+    properties.push_back(0);
+
+    // Create context with error handling
+    cl_int err;
+    context = cl::Context(
+        {device},
+        properties.data(),
+        nullptr,
+        nullptr,
+        &err
+    );
+    
+    if (err != CL_SUCCESS) {
+        std::cerr << "Failed to create OpenCL context. Error code: " << err << std::endl;
+        throw std::runtime_error("Failed to create OpenCL context");
+    }
     queue = cl::CommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE);
 }
 
