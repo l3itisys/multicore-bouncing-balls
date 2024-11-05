@@ -136,8 +136,8 @@ void GPUManager::createContext() {
     }
     
     // Set up context properties
-    std::vector<cl_context_properties> properties = {
-        CL_CONTEXT_PLATFORM, (cl_context_properties)(platform)(),
+    cl_context_properties properties[] = {
+        CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
         CL_GL_CONTEXT_KHR, (cl_context_properties)glxContext,
         CL_GLX_DISPLAY_KHR, (cl_context_properties)display,
         0
@@ -189,10 +189,10 @@ void GPUManager::createContext() {
 
         // Create the context using the C API
         cl_context clContext = clCreateContext(
-            properties.data(),
+            properties,
             1,
             deviceIds.data(),
-            contextCallback,
+            nullptr,  // Simplified error callback
             nullptr,
             &err
         );
