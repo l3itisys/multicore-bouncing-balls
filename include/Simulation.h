@@ -3,7 +3,6 @@
 
 #include "Types.h"
 #include "GPUManager.h"
-#include "Timing.h"
 #include <vector>
 #include <thread>
 #include <memory>
@@ -26,6 +25,7 @@ public:
     void stop();
     std::vector<Ball> getBalls() const;
     double getCurrentFPS() const { return timing.getFPS(); }
+    GPUManager& getGPUManager() { return gpuManager; }
 
 private:
     // Thread functions

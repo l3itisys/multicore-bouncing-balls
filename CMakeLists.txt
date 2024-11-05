@@ -1,46 +1,53 @@
 cmake_minimum_required(VERSION 3.10)
-cmake_policy(SET CMP0072 NEW)
-set(OpenGL_GL_PREFERENCE GLVND)
+project(BouncingBalls)
 
-project(BouncingBallsSimulation)
-
-# Set C++17 standard
+# Set C++17
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required packages
 find_package(OpenGL REQUIRED)
-find_package(glfw3 3.3 REQUIRED)
+find_package(OpenCL REQUIRED)
 find_package(GLEW REQUIRED)
-find_package(TBB REQUIRED)
+find_package(glfw3 3.3 REQUIRED)
 
-# Include directories
-include_directories(
-    ${OPENGL_INCLUDE_DIRS}
-    ${GLEW_INCLUDE_DIRS}
-    ${TBB_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/include
-)
-
-# Source files
-set(SOURCE_FILES
+# Add all source files
+set(SOURCES
     src/main.cpp
-    src/Ball.cpp
-    src/Simulation.cpp
+    src/GPUManager.cpp
     src/Renderer.cpp
-    src/Grid.cpp
+    src/Simulation.cpp
 )
 
 # Create executable
-add_executable(BouncingBallsSimulation ${SOURCE_FILES})
+add_executable(bouncing_balls ${SOURCES})
+
+# Include directories
+target_include_directories(bouncing_balls PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
 # Link libraries
-target_link_libraries(BouncingBallsSimulation
-    ${OPENGL_LIBRARIES}
+target_link_libraries(bouncing_balls PRIVATE
+    OpenGL::GL
+    OpenCL::OpenCL
+    GLEW::GLEW
     glfw
-    ${GLEW_LIBRARIES}
-    TBB::tbb
+)
+
+# On Linux, link against X11 libraries
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+    if(X11_FOUND)
+        target_include_directories(bouncing_balls PRIVATE ${X11_INCLUDE_DIR})
+        target_link_libraries(bouncing_balls PRIVATE ${X11_LIBRARIES})
+    endif()
+endif()
+
+# Copy OpenCL kernel to build directory
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/kernels/simulation.cl
+    ${CMAKE_CURRENT_BINARY_DIR}/simulation.cl
+    COPYONLY
 )
 

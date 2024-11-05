@@ -1,73 +1,42 @@
 #include "Simulation.h"
 #include <random>
-#include <chrono>
-#include <tbb/parallel_for.h>
 #include <iostream>
+#include <iomanip>
+#include <chrono>
+#include <algorithm>
 
-Simulation::Simulation(int numBalls, float screenWidth, float screenHeight)
-    : screenWidth_(screenWidth), screenHeight_(screenHeight),
-      grid_(screenWidth, screenHeight, 150.0f), running_(false), dt_(0.016f) {
+namespace sim {
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> vel(-100.0f, 100.0f);
-    std::uniform_real_distribution<float> posX(0, screenWidth_);
-    std::uniform_real_distribution<float> posY(0, screenHeight_);
+// Use high_resolution_clock consistently
+using clock = std::chrono::high_resolution_clock;
+using duration = std::chrono::duration<double>;
 
-    // Radius and mass pairs
-    std::vector<std::pair<float, float>> radiusMassOptions = {
-        {50.0f, 5.0f},
-        {100.0f, 10.0f},
-        {150.0f, 15.0f}
-    };
+Simulation::Simulation(int numBalls, float screenWidth, float screenHeight) {
+    // Initialize simulation constants
+    constants.dt = PHYSICS_DT;
+    constants.gravity = 9.81f;
+    constants.restitution = 0.8f;
+    constants.screenDimensions = Vec2(screenWidth, screenHeight);
 
-    // Primary colors
-    std::vector<int> colors = {
-        0xFF0000,  // Red
-        0x00FF00,  // Green
-        0x0000FF   // Blue
-    };
+    try {
+        // Initialize balls
+        initializeBalls(numBalls);
 
-    std::uniform_int_distribution<size_t> optionDist(0, radiusMassOptions.size() - 1);
-    std::uniform_int_distribution<size_t> colorDist(0, colors.size() - 1);
+        // Initialize GPU
+        gpuManager.initialize(
+            balls.size(),
+            static_cast<int>(screenWidth),
+            static_cast<int>(screenHeight)
+        );
 
-    int maxAttempts = 100; // Prevent infinite loops in case of too many overlaps
-    for (int i = 0; i < numBalls; ++i) {
-        bool placed = false;
-        int attempts = 0;
-        while (!placed && attempts < maxAttempts) {
-            auto [radius, mass] = radiusMassOptions[optionDist(gen)];
-            float x = std::clamp(posX(gen), radius, screenWidth_ - radius);
-            float y = std::clamp(posY(gen), radius, screenHeight_ - radius);
-
-            bool overlap = false;
-            for (const auto& existingBall : ballsStorage_) {
-                float ex, ey;
-                existingBall->getPosition(ex, ey);
-                float dx = ex - x;
-                float dy = ey - y;
-                float minDist = existingBall->getRadius() + radius;
-                if (dx * dx + dy * dy < minDist * minDist) {
-                    overlap = true;
-                    break;
-                }
-            }
-
-            if (!overlap) {
-                auto ball = std::make_unique<Ball>(
-                    i, radius, mass, x, y, vel(gen), vel(gen),
-                    colors[colorDist(gen)], grid_, screenWidth_, screenHeight_
-                );
-                balls_.push_back(ball.get());        // Add raw pointer to concurrent_vector
-                ballsStorage_.push_back(std::move(ball)); // Store unique_ptr
-                placed = true;
-            }
-            ++attempts;
-        }
-        if (attempts == maxAttempts) {
-            std::cerr << "Warning: Could not place all balls without overlap.\n";
-            break;
-        }
+        std::cout << "Simulation initialized:\n"
+                  << "- Number of balls: " << balls.size() << "\n"
+                  << "- Physics rate: " << PHYSICS_RATE << " Hz\n"
+                  << "- Display rate: " << DISPLAY_RATE << " Hz\n"
+                  << "- Screen size: " << screenWidth << "x" << screenHeight << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Initialization error: " << e.what() << std::endl;
+        throw;
     }
 }
 
@@ -76,56 +45,236 @@ Simulation::~Simulation() {
 }
 
 void Simulation::start() {
-    running_ = true;
-    simulationThread_ = std::thread(&Simulation::simulationLoop, this);
+    if (!running.exchange(true)) {
+        // Initialize timing with high_resolution_clock
+        timing.lastFrameTime = clock::now();
+
+        // Start both threads
+        controlThread = std::thread(&Simulation::controlThreadFunc, this);
+        computeThread = std::thread(&Simulation::computationThreadFunc, this);
+
+        std::cout << "Simulation threads started\n";
+    }
 }
 
 void Simulation::stop() {
-    running_ = false;
-    if (simulationThread_.joinable()) {
-        simulationThread_.join();
+    running.store(false);
+
+    if (controlThread.joinable()) {
+        controlThread.join();
+    }
+    if (computeThread.joinable()) {
+        computeThread.join();
     }
 }
 
-void Simulation::simulationLoop() {
-    while (running_) {
-        auto startTime = std::chrono::high_resolution_clock::now();
+void Simulation::controlThreadFunc() {
+    auto nextFrameTime = clock::now();
+    const auto frameInterval = std::chrono::duration_cast<clock::duration>(
+        duration(DISPLAY_DT)
+    );
 
-        // Update simulation
-        update(dt_);
+    int frameCount = 0;
+    auto lastFpsUpdate = clock::now();
 
-        // Control simulation update rate
-        auto endTime = std::chrono::high_resolution_clock::now();
-        float frameTime = std::chrono::duration<float>(endTime - startTime).count();
-        if (frameTime < dt_) {
-            std::this_thread::sleep_for(std::chrono::duration<float>(dt_ - frameTime));
+    std::cout << "Control thread started: Target " << DISPLAY_RATE << " FPS\n";
+
+    while (running) {
+        auto frameStart = clock::now();
+
+        // Wait for computation to complete
+        threadSync.waitForComputation();
+
+        // Update display
+        updateDisplay();
+
+        // Calculate FPS
+        frameCount++;
+        auto now = clock::now();
+        auto elapsed = now - lastFpsUpdate;
+
+        if (std::chrono::duration_cast<duration>(elapsed).count() >= 1.0) {
+            double fps = frameCount / std::chrono::duration_cast<duration>(elapsed).count();
+            timing.currentFps.store(fps);
+
+            // Print performance metrics
+            std::cout << std::fixed << std::setprecision(1)
+                      << "Display FPS: " << fps
+                      << " | Physics time: " << metrics.physicsTime.load() << "ms"
+                      << " | Render time: " << metrics.renderTime.load() << "ms"
+                      << " | Active threads: " << metrics.activeThreads.load()
+                      << std::endl;
+
+            frameCount = 0;
+            lastFpsUpdate = now;
         }
-    }
-}
 
-void Simulation::update(float dt) {
-    // Apply gravity and update positions in parallel
-    tbb::parallel_for(size_t(0), ballsStorage_.size(), [&](size_t i) {
-        ballsStorage_[i]->applyGravity(dt);
-        ballsStorage_[i]->updatePosition(dt);
-        ballsStorage_[i]->checkBoundaryCollision();
-    });
-
-    // Clear grid
-    grid_.clear();
-
-    // Insert balls into grid
-    for (auto& ball : ballsStorage_) {
-        grid_.insertBall(ball.get());
+        // Control frame rate
+        nextFrameTime += frameInterval;
+        std::this_thread::sleep_until(nextFrameTime);
     }
 
-    // Detect and resolve collisions in parallel
-    tbb::parallel_for(size_t(0), ballsStorage_.size(), [&](size_t i) {
-        ballsStorage_[i]->detectCollisions();
-    });
+    std::cout << "Control thread stopped\n";
 }
 
-const tbb::concurrent_vector<Ball*>& Simulation::getBalls() const {
-    return balls_;
+void Simulation::computationThreadFunc() {
+    auto nextUpdateTime = clock::now();
+    const auto updateInterval = std::chrono::duration_cast<clock::duration>(
+        duration(PHYSICS_DT)
+    );
+
+    metrics.activeThreads.fetch_add(1);
+    std::cout << "Computation thread started: Physics rate " << PHYSICS_RATE << " Hz\n";
+
+    while (running) {
+        auto updateStart = clock::now();
+
+        threadSync.startComputation();
+
+        try {
+            // Update physics on GPU
+            updatePhysics();
+
+            // Synchronize state
+            synchronizeState();
+
+            // Update metrics
+            auto updateEnd = clock::now();
+            metrics.physicsTime.store(
+                std::chrono::duration_cast<duration>(updateEnd - updateStart).count() * 1000.0
+            );
+
+        } catch (const std::exception& e) {
+            std::cerr << "Computation error: " << e.what() << std::endl;
+            running.store(false);
+            break;
+        }
+
+        threadSync.endComputation();
+
+        // Control update rate
+        nextUpdateTime += updateInterval;
+        std::this_thread::sleep_until(nextUpdateTime);
+    }
+
+    metrics.activeThreads.fetch_sub(1);
+    std::cout << "Computation thread stopped\n";
 }
 
+void Simulation::updatePhysics() {
+    std::lock_guard<std::mutex> lock(ballsMutex);
+    gpuManager.updateSimulation(balls, constants);
+}
+
+void Simulation::updateDisplay() {
+    auto start = clock::now();
+
+    try {
+        std::lock_guard<std::mutex> lock(ballsMutex);
+        gpuManager.updateDisplay();
+
+    } catch (const std::exception& e) {
+        std::cerr << "Display update error: " << e.what() << std::endl;
+    }
+
+    auto end = clock::now();
+    metrics.renderTime.store(
+        std::chrono::duration_cast<duration>(end - start).count() * 1000.0
+    );
+}
+
+void Simulation::synchronizeState() {
+    std::lock_guard<std::mutex> lock(ballsMutex);
+    gpuManager.synchronizeState(balls);
+}
+
+void Simulation::initializeBalls(int numBalls) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    // Ball configurations
+    struct BallConfig {
+        float radius;
+        float mass;
+    };
+
+    const std::array<BallConfig, 3> configs = {{
+        {50.0f, 5.0f},   // Small
+        {100.0f, 10.0f}, // Medium
+        {150.0f, 15.0f}  // Large
+    }};
+
+    const std::array<uint32_t, 3> colors = {
+        0xFF0000,  // Red
+        0x00FF00,  // Green
+        0x0000FF   // Blue
+    };
+
+    // Random distributions
+    std::uniform_real_distribution<float> velDist(-VELOCITY_RANGE, VELOCITY_RANGE);
+    std::uniform_int_distribution<size_t> configDist(0, configs.size() - 1);
+    std::uniform_int_distribution<size_t> colorDist(0, colors.size() - 1);
+
+    balls.reserve(numBalls);
+    const int maxAttempts = 100;
+
+    for (int i = 0; i < numBalls; ++i) {
+        Ball ball{};
+        const auto& config = configs[configDist(gen)];
+
+        ball.radius = config.radius;
+        ball.mass = config.mass;
+        ball.color = colors[colorDist(gen)];
+
+        // Position distributions
+        std::uniform_real_distribution<float> posX(
+            ball.radius,
+            constants.screenDimensions.x - ball.radius
+        );
+        std::uniform_real_distribution<float> posY(
+            ball.radius,
+            constants.screenDimensions.y - ball.radius
+        );
+
+        // Place ball without overlap
+        bool validPosition = false;
+        for (int attempt = 0; attempt < maxAttempts && !validPosition; ++attempt) {
+            validPosition = true;
+            ball.position = Vec2(posX(gen), posY(gen));
+
+            for (const auto& existingBall : balls) {
+                float dx = existingBall.position.x - ball.position.x;
+                float dy = existingBall.position.y - ball.position.y;
+                float minDist = (existingBall.radius + ball.radius) * MIN_DISTANCE_FACTOR;
+
+                if (dx * dx + dy * dy < minDist * minDist) {
+                    validPosition = false;
+                    break;
+                }
+            }
+        }
+
+        if (!validPosition) {
+            std::cerr << "Warning: Could not place ball " << i
+                      << " after " << maxAttempts << " attempts.\n";
+            continue;
+        }
+
+        // Set random velocity
+        ball.velocity = Vec2(velDist(gen), velDist(gen));
+        balls.push_back(ball);
+    }
+
+    if (balls.empty()) {
+        throw std::runtime_error("Failed to place any balls");
+    }
+
+    std::cout << "Successfully initialized " << balls.size() << " balls\n";
+}
+
+std::vector<Ball> Simulation::getBalls() const {
+    std::lock_guard<std::mutex> lock(ballsMutex);
+    return balls;
+}
+
+}
