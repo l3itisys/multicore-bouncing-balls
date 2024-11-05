@@ -120,10 +120,10 @@ void GPUManager::createContext() {
 
     // OpenGL context properties
     std::vector<cl_context_properties> properties;
-    
+
     properties.push_back(CL_GL_CONTEXT_KHR);
     properties.push_back((cl_context_properties)glfwGetCurrentContext());
-    
+
 #ifdef _WIN32
     properties.push_back(CL_WGL_HDC_KHR);
     properties.push_back((cl_context_properties)wglGetCurrentDC());
@@ -148,7 +148,7 @@ void GPUManager::createContext() {
         nullptr,
         &err
     );
-    
+
     if (err != CL_SUCCESS) {
         std::cerr << "Failed to create OpenCL context. Error code: " << err << std::endl;
         throw std::runtime_error("Failed to create OpenCL context");
