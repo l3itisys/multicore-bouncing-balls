@@ -117,6 +117,14 @@ void GPUManager::createContext() {
     if (!currentWindow) {
         throw std::runtime_error("No current OpenGL context");
     }
+    
+    // Ensure OpenGL context is current
+    glfwMakeContextCurrent(currentWindow);
+    
+    // Verify OpenGL context
+    if (!glXGetCurrentContext()) {
+        throw std::runtime_error("Failed to make OpenGL context current");
+    }
 
     // Get current OpenGL context and display
 #ifdef __linux__
@@ -151,25 +159,49 @@ void GPUManager::createContext() {
         // Make sure OpenGL is done with any commands
         glFinish();
         
+        // Debug: Print current OpenGL context
+        std::cout << "Current GLX Context: " << glXGetCurrentContext() << std::endl;
+        std::cout << "Current Display: " << glXGetCurrentDisplay() << std::endl;
+        
         // Create a temporary array of devices
         std::vector<cl_device_id> deviceIds = {device()};
+        
+        // Debug callback for context creation
+        auto contextCallback = [](const char* errInfo, const void* privateInfo, 
+                                size_t cb, void* userData) {
+            std::cerr << "OpenCL Context Error: " << errInfo << std::endl;
+        };
         
         // Create the context using the C API for more control
         cl_context clContext = clCreateContext(
             properties.data(),
             1,
             deviceIds.data(),
-            nullptr,
+            contextCallback,
             nullptr,
             &err
         );
         
         if (err != CL_SUCCESS || !clContext) {
-            throw cl::Error(err, "Failed to create OpenCL context");
+            std::stringstream ss;
+            ss << "Failed to create OpenCL context. Error code: " << err;
+            switch (err) {
+                case CL_INVALID_PLATFORM: ss << " (CL_INVALID_PLATFORM)"; break;
+                case CL_INVALID_PROPERTY: ss << " (CL_INVALID_PROPERTY)"; break;
+                case CL_INVALID_VALUE: ss << " (CL_INVALID_VALUE)"; break;
+                case CL_INVALID_DEVICE: ss << " (CL_INVALID_DEVICE)"; break;
+                case CL_DEVICE_NOT_AVAILABLE: ss << " (CL_DEVICE_NOT_AVAILABLE)"; break;
+                case CL_OUT_OF_RESOURCES: ss << " (CL_OUT_OF_RESOURCES)"; break;
+                case CL_OUT_OF_HOST_MEMORY: ss << " (CL_OUT_OF_HOST_MEMORY)"; break;
+                default: ss << " (Unknown Error)";
+            }
+            throw cl::Error(err, ss.str().c_str());
         }
         
         // Wrap the C context in a C++ object
         context = cl::Context(clContext, true);  // true means retain the context
+        
+        std::cout << "OpenCL context created successfully!" << std::endl;
 
         if (err != CL_SUCCESS) {
             std::stringstream ss;
