@@ -111,15 +111,23 @@ void GPUManager::createContext() {
               << " from "
               << platform.getInfo<CL_PLATFORM_VENDOR>()
               << "\nDevice extensions: " << extensions << std::endl;
-    if (extensions.find("cl_khr_gl_sharing") == std::string::npos) {
-        throw std::runtime_error("OpenCL device does not support cl_khr_gl_sharing");
+
+    // Get current OpenGL context and display
+    GLFWwindow* currentWindow = glfwGetCurrentContext();
+    if (!currentWindow) {
+        throw std::runtime_error("No current OpenGL context");
     }
 
     // OpenGL context properties
     std::vector<cl_context_properties> properties;
+    
+    // Platform must be the first property
+    properties.push_back(CL_CONTEXT_PLATFORM);
+    properties.push_back((cl_context_properties)(platform)());
 
+    // Then add OpenGL context properties
     properties.push_back(CL_GL_CONTEXT_KHR);
-    properties.push_back((cl_context_properties)glfwGetCurrentContext());
+    properties.push_back((cl_context_properties)currentWindow);
 
 #ifdef _WIN32
     properties.push_back(CL_WGL_HDC_KHR);
@@ -128,27 +136,63 @@ void GPUManager::createContext() {
     properties.push_back(CL_CGL_SHAREGROUP_KHR);
     properties.push_back((cl_context_properties)CGLGetShareGroup(CGLGetCurrentContext()));
 #else // Linux
+    Display* display = glXGetCurrentDisplay();
+    if (!display) {
+        throw std::runtime_error("Failed to get current X display");
+    }
     properties.push_back(CL_GLX_DISPLAY_KHR);
-    properties.push_back((cl_context_properties)glXGetCurrentDisplay());
+    properties.push_back((cl_context_properties)display);
 #endif
 
-    properties.push_back(CL_CONTEXT_PLATFORM);
-    properties.push_back((cl_context_properties)(platform)());
-    properties.push_back(0);
+    properties.push_back(0);  // Null terminator
+
+    // Debug output
+    std::cout << "Creating OpenCL context with properties:" << std::endl;
+    for (size_t i = 0; i < properties.size() - 1; i += 2) {
+        std::cout << "Property " << properties[i] << ": " << properties[i + 1] << std::endl;
+    }
 
     // Create context with error handling
     cl_int err;
-    context = cl::Context(
-        {device},
-        properties.data(),
-        nullptr,
-        nullptr,
-        &err
-    );
+    try {
+        context = cl::Context(
+            {device},
+            properties.data(),
+            nullptr,
+            nullptr,
+            &err
+        );
 
-    if (err != CL_SUCCESS) {
-        std::cerr << "Failed to create OpenCL context. Error code: " << err << std::endl;
-        throw std::runtime_error("Failed to create OpenCL context");
+        if (err != CL_SUCCESS) {
+            std::string errorMsg = "Failed to create OpenCL context. Error code: " + std::to_string(err);
+            switch (err) {
+                case CL_INVALID_PLATFORM:
+                    errorMsg += " (CL_INVALID_PLATFORM)";
+                    break;
+                case CL_INVALID_PROPERTY:
+                    errorMsg += " (CL_INVALID_PROPERTY)";
+                    break;
+                case CL_INVALID_VALUE:
+                    errorMsg += " (CL_INVALID_VALUE)";
+                    break;
+                case CL_INVALID_DEVICE:
+                    errorMsg += " (CL_INVALID_DEVICE)";
+                    break;
+                case CL_DEVICE_NOT_AVAILABLE:
+                    errorMsg += " (CL_DEVICE_NOT_AVAILABLE)";
+                    break;
+                case CL_OUT_OF_RESOURCES:
+                    errorMsg += " (CL_OUT_OF_RESOURCES)";
+                    break;
+                case CL_OUT_OF_HOST_MEMORY:
+                    errorMsg += " (CL_OUT_OF_HOST_MEMORY)";
+                    break;
+            }
+            throw std::runtime_error(errorMsg);
+        }
+    } catch (const cl::Error& e) {
+        std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")" << std::endl;
+        throw;
     }
     queue = cl::CommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE);
 }
