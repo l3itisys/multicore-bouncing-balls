@@ -111,9 +111,6 @@ void GPUManager::createContext() {
               << " from "
               << platform.getInfo<CL_PLATFORM_VENDOR>()
               << "\nDevice extensions: " << extensions << std::endl;
-
-    // Check if cl_khr_gl_sharing is supported
-    std::string extensions = device.getInfo<CL_DEVICE_EXTENSIONS>();
     if (extensions.find("cl_khr_gl_sharing") == std::string::npos) {
         throw std::runtime_error("OpenCL device does not support cl_khr_gl_sharing");
     }
