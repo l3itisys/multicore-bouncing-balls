@@ -148,7 +148,7 @@ void GPUManager::createContext() {
 
     // Debug output
     std::cout << "Creating OpenCL context with properties:" << std::endl;
-    for (size_t i = 0; i < properties.size() - 1; i += 2) {
+    for (size_t i = 0; properties[i] != 0; i += 2) {
         std::cout << "Property " << std::hex << properties[i] 
                   << ": 0x" << properties[i + 1] << std::dec << std::endl;
     }
@@ -177,12 +177,9 @@ void GPUManager::createContext() {
             throw std::runtime_error("No valid OpenGL context");
         }
 
-        // Ensure properties are properly terminated
-        properties.push_back(0);  // Ensure null termination
-
         // Print properties for debugging
         std::cout << "Context properties:" << std::endl;
-        for (size_t i = 0; i < properties.size() - 1; i += 2) {
+        for (size_t i = 0; properties[i] != 0; i += 2) {
             std::cout << std::hex << "  0x" << properties[i] 
                       << " -> 0x" << properties[i + 1] << std::dec << std::endl;
         }
