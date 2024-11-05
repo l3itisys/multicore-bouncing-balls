@@ -3,6 +3,7 @@
 
 #include "Types.h"
 #include "GPUManager.h"
+#include "Timing.h"
 #include <vector>
 #include <thread>
 #include <memory>
@@ -72,3 +73,33 @@ private:
 } // namespace sim
 
 #endif // BOUNCING_BALLS_SIMULATION_H
+#ifndef BOUNCING_BALLS_TIMING_H
+#define BOUNCING_BALLS_TIMING_H
+
+#include <chrono>
+#include <atomic>
+
+namespace sim {
+
+struct FrameTiming {
+    std::chrono::steady_clock::time_point lastFrameTime;
+    std::atomic<double> currentFps{0.0};
+
+    double getFPS() const { return currentFps.load(); }
+};
+
+struct ThreadSync {
+    std::atomic<bool> computationDone{true};
+
+    void startComputation() { computationDone.store(false); }
+    void endComputation() { computationDone.store(true); }
+    void waitForComputation() {
+        while (!computationDone.load()) {
+            std::this_thread::yield();
+        }
+    }
+};
+
+} // namespace sim
+
+#endif // BOUNCING_BALLS_TIMING_H
