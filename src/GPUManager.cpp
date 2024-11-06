@@ -158,68 +158,9 @@ void GPUManager::createContext() {
     try {
         // Make sure OpenGL is done with any commands
         glFinish();
-        
-        // Debug: Print current OpenGL context and properties
-        std::cout << "Current GLX Context: " << std::hex << glXGetCurrentContext() << std::dec << std::endl;
-        std::cout << "Current Display: " << std::hex << glXGetCurrentDisplay() << std::dec << std::endl;
-        
-        // Create a temporary array of devices
-        std::vector<cl_device_id> deviceIds = {device()};
-        
-        // Debug callback for context creation
-        auto contextCallback = [](const char* errInfo, const void* privateInfo, 
-                                size_t cb, void* userData) {
-            std::cerr << "OpenCL Context Error: " << errInfo << std::endl;
-        };
 
-        // Ensure we have a valid OpenGL context
-        if (!glXGetCurrentContext()) {
-            throw std::runtime_error("No valid OpenGL context");
-        }
-
-        // Print properties for debugging
-        std::cout << "Context properties:" << std::endl;
-        for (size_t i = 0; properties[i] != 0; i += 2) {
-            std::cout << std::hex << "  0x" << properties[i] 
-                      << " -> 0x" << properties[i + 1] << std::dec << std::endl;
-        }
-
-        // Create the context using the C API
-        cl_context clContext = clCreateContext(
-            properties,
-            1,
-            deviceIds.data(),
-            nullptr,  // Simplified error callback
-            nullptr,
-            &err
-        );
-
-        if (err != CL_SUCCESS) {
-            std::stringstream ss;
-            ss << "Context creation failed with error " << err;
-            throw cl::Error(err, ss.str().c_str());
-        }
-        
-        if (err != CL_SUCCESS || !clContext) {
-            std::stringstream ss;
-            ss << "Failed to create OpenCL context. Error code: " << err;
-            switch (err) {
-                case CL_INVALID_PLATFORM: ss << " (CL_INVALID_PLATFORM)"; break;
-                case CL_INVALID_PROPERTY: ss << " (CL_INVALID_PROPERTY)"; break;
-                case CL_INVALID_VALUE: ss << " (CL_INVALID_VALUE)"; break;
-                case CL_INVALID_DEVICE: ss << " (CL_INVALID_DEVICE)"; break;
-                case CL_DEVICE_NOT_AVAILABLE: ss << " (CL_DEVICE_NOT_AVAILABLE)"; break;
-                case CL_OUT_OF_RESOURCES: ss << " (CL_OUT_OF_RESOURCES)"; break;
-                case CL_OUT_OF_HOST_MEMORY: ss << " (CL_OUT_OF_HOST_MEMORY)"; break;
-                default: ss << " (Unknown Error)";
-            }
-            throw cl::Error(err, ss.str().c_str());
-        }
-        
-        // Wrap the C context in a C++ object
-        context = cl::Context(clContext, true);  // true means retain the context
-        
-        std::cout << "OpenCL context created successfully!" << std::endl;
+        // Create context using C++ API
+        context = cl::Context({device}, properties, nullptr, nullptr, &err);
 
         if (err != CL_SUCCESS) {
             std::stringstream ss;
@@ -236,6 +177,8 @@ void GPUManager::createContext() {
             }
             throw std::runtime_error(ss.str());
         }
+
+        std::cout << "OpenCL context created successfully!" << std::endl;
     } catch (const cl::Error& e) {
         std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")" << std::endl;
         throw;
