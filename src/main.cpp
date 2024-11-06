@@ -8,8 +8,6 @@
 #include <iomanip>
 #include <csignal>
 
-#include <GLFW/glfw3.h>
-
 volatile std::sig_atomic_t g_running = 1;
 
 void signalHandler(int signum) {
@@ -34,7 +32,6 @@ int main(int argc, char* argv[]) {
     try {
         setupSignalHandling();
 
-        // Configuration
         const int screenWidth = 1400;
         const int screenHeight = 900;
 
@@ -42,7 +39,7 @@ int main(int argc, char* argv[]) {
         int numBalls = 5;  // Default
         if (argc > 1) {
             try {
-                numBalls = std::clamp(std::stoi(argv[1]), 3, 1000);
+                numBalls = std::clamp(std::stoi(argv[1]), 3, 100);
             } catch (const std::exception& e) {
                 std::cerr << "Invalid input. Using default " << numBalls << " balls.\n";
             }
@@ -56,78 +53,88 @@ int main(int argc, char* argv[]) {
                   << "- OpenGL for rendering\n"
                   << "- OpenCL for physics computation\n\n";
 
-        // Initialize GLFW
-        if (!glfwInit()) {
-            throw std::runtime_error("Failed to initialize GLFW");
-        }
-
-        // Configure GLFW window hints
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-        // Create window
-        GLFWwindow* window = glfwCreateWindow(
-            screenWidth, screenHeight,
-            "Bouncing Balls Simulation (OpenCL)",
-            nullptr, nullptr
-        );
-
-        if (!window) {
-            glfwTerminate();
-            throw std::runtime_error("Failed to create GLFW window");
-        }
-
-        glfwMakeContextCurrent(window);
-
-        // Initialize GLEW
-        glewExperimental = GL_TRUE;
-        GLenum err = glewInit();
-        if (err != GLEW_OK) {
-            std::cerr << "GLEW initialization failed: " << glewGetErrorString(err) << std::endl;
-            glfwDestroyWindow(window);
-            glfwTerminate();
-            throw std::runtime_error("Failed to initialize GLEW");
-        }
-
-        // Enable VSync
-        glfwSwapInterval(1);
-
-        // Now that OpenGL context is created and GLEW is initialized, we can initialize the Simulation
+        // Create simulation and renderer
         sim::Simulation simulation(numBalls,
-                                   static_cast<float>(screenWidth),
-                                   static_cast<float>(screenHeight));
+                                 static_cast<float>(screenWidth),
+                                 static_cast<float>(screenHeight));
 
-        // Create renderer, passing the window and GPUManager
-        sim::Renderer renderer(screenWidth, screenHeight, simulation.getGPUManager());
+        sim::Renderer renderer(screenWidth, screenHeight);
 
-        if (!renderer.initialize(window)) {
-            simulation.stop();
-            glfwDestroyWindow(window);
-            glfwTerminate();
+        if (!renderer.initialize()) {
             throw std::runtime_error("Failed to initialize renderer");
         }
 
-        // Start simulation thread
+        // Performance monitoring setup
+        using clock = std::chrono::steady_clock;
+        using duration = std::chrono::duration<double>;
+
+        int frameCount = 0;
+        auto lastReport = clock::now();
+        auto simulationStart = clock::now();
+
+        double totalFrameTime = 0.0;
+        double maxFrameTime = 0.0;
+        double minFrameTime = std::numeric_limits<double>::max();
+
+        // Start simulation thread (computation thread)
         simulation.start();
 
-        // Main loop
-        while (g_running && !renderer.shouldClose()) {
-            // Update display
-            renderer.render(simulation.getCurrentFPS());
+        // Main loop (control thread) - maintains 30 FPS
+        const duration frameTime(1.0 / 30.0);
+        auto nextFrameTime = clock::now();
 
-            // Swap buffers and poll events
-            glfwSwapBuffers(window);
-            glfwPollEvents();
+        std::cout << "Simulation started. Press Ctrl+C to exit.\n\n";
+
+        while (g_running && !renderer.shouldClose()) {
+            auto frameStart = clock::now();
+
+            // Get current state and render
+            const auto& balls = simulation.getBalls();
+            renderer.render(balls, simulation.getCurrentFPS());
+
+            // Performance monitoring
+            auto frameEnd = clock::now();
+            auto frameDuration = duration(frameEnd - frameStart).count();
+
+            totalFrameTime += frameDuration;
+            maxFrameTime = std::max(maxFrameTime, frameDuration);
+            minFrameTime = std::min(minFrameTime, frameDuration);
+            frameCount++;
+
+            // Print statistics every second
+            auto now = clock::now();
+            if (duration(now - lastReport).count() >= 1.0) {
+                double avgFPS = frameCount / duration(now - lastReport).count();
+                double avgFrameTime = totalFrameTime / frameCount;
+
+                std::cout << std::fixed << std::setprecision(1)
+                         << "FPS: " << avgFPS
+                         << " | Frame time (ms) - Avg: " << avgFrameTime * 1000.0
+                         << " Min: " << minFrameTime * 1000.0
+                         << " Max: " << maxFrameTime * 1000.0
+                         << std::endl;
+
+                // Reset statistics
+                frameCount = 0;
+                totalFrameTime = 0.0;
+                maxFrameTime = 0.0;
+                minFrameTime = std::numeric_limits<double>::max();
+                lastReport = now;
+            }
+
+            // Control frame rate
+            nextFrameTime += std::chrono::duration_cast<clock::duration>(frameTime);
+            std::this_thread::sleep_until(nextFrameTime);
         }
 
         // Clean up
         simulation.stop();
-        renderer.cleanup();
-        glfwDestroyWindow(window);
-        glfwTerminate();
 
+        // Print final statistics
+        auto simulationEnd = clock::now();
+        double totalTime = duration(simulationEnd - simulationStart).count();
         std::cout << "\nSimulation completed:\n"
+                  << "- Total runtime: " << totalTime << " seconds\n"
                   << "- Average FPS: " << simulation.getCurrentFPS() << "\n";
 
         return 0;
@@ -137,4 +144,3 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 }
-

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(BouncingBalls)
 
+# Set C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -33,15 +34,6 @@ target_link_libraries(bouncing_balls PRIVATE
     GLEW::GLEW
     glfw
 )
-
-# On Linux, link against X11 libraries
-if(UNIX AND NOT APPLE)
-    find_package(X11 REQUIRED)
-    if(X11_FOUND)
-        target_include_directories(bouncing_balls PRIVATE ${X11_INCLUDE_DIR})
-        target_link_libraries(bouncing_balls PRIVATE ${X11_LIBRARIES})
-    endif()
-endif()
 
 # Copy OpenCL kernel to build directory
 configure_file(

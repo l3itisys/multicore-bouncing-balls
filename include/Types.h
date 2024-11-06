@@ -59,12 +59,12 @@ struct alignas(32) Ball {
 
 // Simulation constants matching OpenCL kernel structure
 struct alignas(32) SimConstants {
-    float dt;                 // Time step
-    float gravity;            // Gravity constant
+    float dt;
+    float gravity;
     float restitution;        // Collision restitution
     float padding;            // Alignment padding
-    Vec2 screenDimensions;    // Screen dimensions
-    Vec2 reserved;           // Reserved for future use
+    Vec2 screenDimensions;
+    Vec2 reserved;
 };
 
 // Frame timing control
@@ -108,7 +108,6 @@ private:
     std::atomic<bool> computationInProgress{false};
 };
 
-// Error handling class
 class SimulationError : public std::runtime_error {
 public:
     explicit SimulationError(const std::string& what_arg)
@@ -120,3 +119,4 @@ public:
 }
 
 #endif // BOUNCING_BALLS_TYPES_H
+

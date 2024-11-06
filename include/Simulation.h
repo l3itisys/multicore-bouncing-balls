@@ -1,8 +1,8 @@
 #ifndef BOUNCING_BALLS_SIMULATION_H
 #define BOUNCING_BALLS_SIMULATION_H
 
-#include "GPUManager.h"
 #include "Types.h"
+#include "GPUManager.h"
 #include <vector>
 #include <thread>
 #include <memory>
@@ -12,20 +12,16 @@ namespace sim {
 
 class Simulation {
 public:
-    // Constructor and destructor
     Simulation(int numBalls, float screenWidth, float screenHeight);
     ~Simulation();
 
-    // Delete copy operations
     Simulation(const Simulation&) = delete;
     Simulation& operator=(const Simulation&) = delete;
 
-    // Control interface
     void start();
     void stop();
     std::vector<Ball> getBalls() const;
     double getCurrentFPS() const { return timing.getFPS(); }
-    GPUManager& getGPUManager() { return gpuManager; }
 
 private:
     // Thread functions
@@ -33,13 +29,11 @@ private:
     void computationThreadFunc();  // Manages GPU computations
     void initializeBalls(int numBalls);
 
-    // Thread management functions
     void updateDisplay();      // Updates display at 30 FPS
     void updatePhysics();      // Updates physics on GPU
     void synchronizeState();   // Synchronizes GPU and CPU state
     void monitorPerformance(); // Monitors and reports performance
 
-    // Member data
     std::vector<Ball> balls;
     SimConstants constants;
     mutable std::mutex ballsMutex;
@@ -54,7 +48,6 @@ private:
     // GPU management
     GPUManager gpuManager;
 
-    // Constants and configuration
     static constexpr float VELOCITY_RANGE = 100.0f;
     static constexpr float MIN_DISTANCE_FACTOR = 1.1f;
     static constexpr float PHYSICS_RATE = 240.0f;  // Physics updates per second
@@ -68,11 +61,8 @@ private:
         std::atomic<double> renderTime{0.0};
         std::atomic<int> activeThreads{0};
     } metrics;
-
-    // State synchronization flag
-    std::atomic<bool> needsStateSynchronization{false};
 };
 
-} // namespace sim
+}
 
 #endif // BOUNCING_BALLS_SIMULATION_H

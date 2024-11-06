@@ -4,20 +4,8 @@
 #include <cmath>
 #include <filesystem>
 #include <sstream>
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-
-#ifdef __linux__
-#include <GL/glx.h>
-#endif
 
 namespace sim {
-
-GPUManager::~GPUManager() {
-    if (glTextureID != 0) {
-        glDeleteTextures(1, &glTextureID);
-    }
-}
 
 void GPUManager::initialize(size_t numBalls, int screenWidth, int screenHeight) {
     if (initialized && numBalls <= currentBufferSize) {
@@ -32,11 +20,9 @@ void GPUManager::initialize(size_t numBalls, int screenWidth, int screenHeight) 
         initialized = true;
         currentBufferSize = numBalls;
 
-        // Store screen dimensions
         screenDimensions.width = screenWidth;
         screenDimensions.height = screenHeight;
 
-        // Print OpenCL device information
         printDeviceInfo();
 
     } catch (const cl::Error& e) {
@@ -61,7 +47,7 @@ cl::Platform GPUManager::selectPlatform() {
     std::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
 
-    // First try to find Intel platform
+    // try to find Intel platform
     for (const auto& platform : platforms) {
         std::string vendor = platform.getInfo<CL_PLATFORM_VENDOR>();
         if (vendor.find("Intel") != std::string::npos) {
@@ -99,90 +85,13 @@ void GPUManager::createContext() {
     cl::Platform platform = selectPlatform();
     cl::Device device = selectDevice(platform);
 
-    // Check for OpenGL-OpenCL interop support
-    std::string extensions = device.getInfo<CL_DEVICE_EXTENSIONS>();
-    if (extensions.find("cl_khr_gl_sharing") == std::string::npos) {
-        std::cerr << "Device does not support OpenGL-OpenCL interop (cl_khr_gl_sharing)" << std::endl;
-        throw std::runtime_error("OpenGL-OpenCL interop not supported");
-    }
-
     std::cout << "Using OpenCL device: "
               << device.getInfo<CL_DEVICE_NAME>()
               << " from "
               << platform.getInfo<CL_PLATFORM_VENDOR>()
-              << "\nDevice extensions: " << extensions << std::endl;
+              << std::endl;
 
-    // Get current OpenGL context and display
-    GLFWwindow* currentWindow = glfwGetCurrentContext();
-    if (!currentWindow) {
-        throw std::runtime_error("No current OpenGL context");
-    }
-    
-    // Ensure OpenGL context is current
-    glfwMakeContextCurrent(currentWindow);
-    
-    // Verify OpenGL context
-    if (!glXGetCurrentContext()) {
-        throw std::runtime_error("Failed to make OpenGL context current");
-    }
-
-    // Get current OpenGL context and display
-#ifdef __linux__
-    Display* display = glXGetCurrentDisplay();
-    GLXContext glxContext = glXGetCurrentContext();
-    
-    if (!display || !glxContext) {
-        throw std::runtime_error("Failed to get GLX context or display");
-    }
-    
-    // Set up context properties
-    cl_context_properties properties[] = {
-        CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
-        CL_GL_CONTEXT_KHR, (cl_context_properties)glxContext,
-        CL_GLX_DISPLAY_KHR, (cl_context_properties)display,
-        0
-    };
-#else
-    #error "Platform not supported"
-#endif
-
-    // Debug output
-    std::cout << "Creating OpenCL context with properties:" << std::endl;
-    for (size_t i = 0; properties[i] != 0; i += 2) {
-        std::cout << "Property " << std::hex << properties[i] 
-                  << ": 0x" << properties[i + 1] << std::dec << std::endl;
-    }
-
-    // Create context
-    cl_int err = CL_SUCCESS;
-    try {
-        // Make sure OpenGL is done with any commands
-        glFinish();
-
-        // Create context using C++ API
-        context = cl::Context({device}, properties, nullptr, nullptr, &err);
-
-        if (err != CL_SUCCESS) {
-            std::stringstream ss;
-            ss << "OpenCL context creation failed (error " << err << "): ";
-            switch (err) {
-                case CL_INVALID_PLATFORM: ss << "CL_INVALID_PLATFORM"; break;
-                case CL_INVALID_PROPERTY: ss << "CL_INVALID_PROPERTY"; break;
-                case CL_INVALID_VALUE: ss << "CL_INVALID_VALUE"; break;
-                case CL_INVALID_DEVICE: ss << "CL_INVALID_DEVICE"; break;
-                case CL_DEVICE_NOT_AVAILABLE: ss << "CL_DEVICE_NOT_AVAILABLE"; break;
-                case CL_OUT_OF_RESOURCES: ss << "CL_OUT_OF_RESOURCES"; break;
-                case CL_OUT_OF_HOST_MEMORY: ss << "CL_OUT_OF_HOST_MEMORY"; break;
-                default: ss << "Unknown error";
-            }
-            throw std::runtime_error(ss.str());
-        }
-
-        std::cout << "OpenCL context created successfully!" << std::endl;
-    } catch (const cl::Error& e) {
-        std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")" << std::endl;
-        throw;
-    }
+    context = cl::Context(device);
     queue = cl::CommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE);
 }
 
@@ -240,34 +149,10 @@ void GPUManager::createKernels() {
     collisionKernel = cl::Kernel(program, "detectCollisions");
 }
 
-void GPUManager::createGLTexture(int width, int height) {
-    // Create OpenGL texture
-    glGenTextures(1, &glTextureID);
-    glBindTexture(GL_TEXTURE_2D, glTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 width, height, 0, GL_RGBA,
-                 GL_UNSIGNED_BYTE, nullptr);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // Create OpenCL image from OpenGL texture
-    cl::ImageGL image(
-        context,
-        CL_MEM_WRITE_ONLY,
-        GL_TEXTURE_2D,
-        0,
-        glTextureID
-    );
-
-    pixelImage = image;
-}
-
 void GPUManager::createBuffers(size_t numBalls, int screenWidth, int screenHeight) {
     // Calculate buffer sizes
     size_t ballBufferSize = sizeof(Ball) * numBalls;
+    size_t pixelBufferSize = sizeof(cl_uchar4) * screenWidth * screenHeight;
 
     // Create buffers with proper memory flags
     ballBuffer = cl::Buffer(
@@ -276,14 +161,17 @@ void GPUManager::createBuffers(size_t numBalls, int screenWidth, int screenHeigh
         ballBufferSize
     );
 
+    pixelBuffer = cl::Buffer(
+        context,
+        CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR,
+        pixelBufferSize
+    );
+
     constantsBuffer = cl::Buffer(
         context,
         CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
         sizeof(SimConstants)
     );
-
-    // Create OpenGL texture and corresponding OpenCL image
-    createGLTexture(screenWidth, screenHeight);
 }
 
 void GPUManager::updateSimulation(std::vector<Ball>& balls, const SimConstants& constants) {
@@ -317,12 +205,29 @@ void GPUManager::updateSimulation(std::vector<Ball>& balls, const SimConstants& 
             cl::NDRange(std::min(balls.size(), WORKGROUP_SIZE))
         );
 
-        // Detect and resolve collisions
+        // Update pixels - many threads for parallel rendering
+        pixelUpdateKernel.setArg(0, ballBuffer);
+        pixelUpdateKernel.setArg(1, pixelBuffer);
+        pixelUpdateKernel.setArg(2, constantsBuffer);
+        pixelUpdateKernel.setArg(3, screenDimensions.width);
+        pixelUpdateKernel.setArg(4, screenDimensions.height);
+        pixelUpdateKernel.setArg(5, static_cast<int>(balls.size()));
+
+        // Use many threads for pixel updates (screenWidth * screenHeight / 16)
+        size_t numPixelThreads = (screenDimensions.width * screenDimensions.height) / 16;
+        queue.enqueueNDRangeKernel(
+            pixelUpdateKernel,
+            cl::NullRange,
+            cl::NDRange(numPixelThreads),
+            cl::NDRange(WORKGROUP_SIZE)
+        );
+
+        // Detect and resolve collisions - multiple threads
         collisionKernel.setArg(0, ballBuffer);
         collisionKernel.setArg(1, constantsBuffer);
         collisionKernel.setArg(2, static_cast<int>(balls.size()));
 
-        size_t numCollisionThreads = balls.size();
+        size_t numCollisionThreads = (balls.size() * (balls.size() - 1)) / 2;
         queue.enqueueNDRangeKernel(
             collisionKernel,
             cl::NullRange,
@@ -330,8 +235,14 @@ void GPUManager::updateSimulation(std::vector<Ball>& balls, const SimConstants& 
             cl::NDRange(std::min(numCollisionThreads, WORKGROUP_SIZE))
         );
 
-        // Synchronize queue
-        queue.finish();
+        // Read back results (blocking)
+        queue.enqueueReadBuffer(
+            ballBuffer,
+            CL_TRUE,
+            0,
+            sizeof(Ball) * balls.size(),
+            balls.data()
+        );
 
     } catch (const cl::Error& e) {
         std::cerr << "OpenCL error in updateSimulation: "
@@ -341,47 +252,22 @@ void GPUManager::updateSimulation(std::vector<Ball>& balls, const SimConstants& 
 }
 
 void GPUManager::updateDisplay() {
-    try {
-        // Acquire OpenGL texture for OpenCL
-        glFinish(); // Ensure OpenGL is done with the texture
-        std::vector<cl::Memory> glObjects = { pixelImage };
-        queue.enqueueAcquireGLObjects(&glObjects);
-
-        // Update pixels - many threads for parallel rendering
-        pixelUpdateKernel.setArg(0, ballBuffer);
-        pixelUpdateKernel.setArg(1, pixelImage);
-        pixelUpdateKernel.setArg(2, constantsBuffer);
-        pixelUpdateKernel.setArg(3, screenDimensions.width);
-        pixelUpdateKernel.setArg(4, screenDimensions.height);
-        pixelUpdateKernel.setArg(5, static_cast<int>(currentBufferSize));
-
-        // Use many threads for pixel updates
-        size_t globalWorkSizeX = (screenDimensions.width + 15) / 16;
-        size_t globalWorkSizeY = (screenDimensions.height + 15) / 16;
-
-        cl::NDRange globalSize(globalWorkSizeX * 16, globalWorkSizeY * 16);
-        cl::NDRange localSize(16, 16);
-
-        queue.enqueueNDRangeKernel(
-            pixelUpdateKernel,
-            cl::NullRange,
-            globalSize,
-            localSize
-        );
-
-        // Release OpenGL texture from OpenCL
-        queue.enqueueReleaseGLObjects(&glObjects);
-        queue.finish();
-
-    } catch (const cl::Error& e) {
-        std::cerr << "OpenCL error in updateDisplay: "
-                  << e.what() << " (" << e.err() << ")" << std::endl;
-        throw;
-    }
 }
 
 void GPUManager::synchronizeState(std::vector<Ball>& balls) {
-    // No need to read back the balls if not necessary
+    try {
+        queue.enqueueReadBuffer(
+            ballBuffer,
+            CL_TRUE,
+            0,
+            sizeof(Ball) * balls.size(),
+            balls.data()
+        );
+    } catch (const cl::Error& e) {
+        std::cerr << "Error synchronizing state: "
+                  << e.what() << " (" << e.err() << ")" << std::endl;
+        throw;
+    }
 }
 
 void GPUManager::checkError(cl_int error, const char* message) {
@@ -390,5 +276,5 @@ void GPUManager::checkError(cl_int error, const char* message) {
     }
 }
 
-} // namespace sim
+}
 

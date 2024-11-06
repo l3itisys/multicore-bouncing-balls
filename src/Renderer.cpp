@@ -1,5 +1,4 @@
 #include "Renderer.h"
-#include "GPUManager.h"
 #include <stdexcept>
 #include <cmath>
 #include <sstream>
@@ -9,7 +8,6 @@
 
 namespace sim {
 
-// Initialize static GLFW context
 Renderer::GLFWContext Renderer::glfw;
 
 // GLFW Context management
@@ -24,33 +22,22 @@ Renderer::GLFWContext::~GLFWContext() {
     glfwTerminate();
 }
 
-Renderer::Renderer(int width_, int height_, GPUManager& gpuManager_)
-    : width(width_), height(height_), window(nullptr), gpuManager(gpuManager_) {
+Renderer::Renderer(int width_, int height_)
+    : width(width_), height(height_), window(nullptr) {
 }
 
 Renderer::~Renderer() {
     if (window) {
         glfwDestroyWindow(window);
     }
-    if (shaderProgram != 0) {
-        glDeleteProgram(shaderProgram);
-    }
-    if (vao != 0) {
-        glDeleteVertexArrays(1, &vao);
-    }
-    if (vbo != 0) {
-        glDeleteBuffers(1, &vbo);
-    }
 }
 
-bool Renderer::initialize(GLFWwindow* window_) {
-    window = window_;
-    // Configure GLFW window hints
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+bool Renderer::initialize() {
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    glfwWindowHint(GLFW_SAMPLES, 4); // Enable antialiasing
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    // Create window
     window = glfwCreateWindow(
         width, height,
         "Bouncing Balls Simulation (OpenCL)",
@@ -72,8 +59,6 @@ bool Renderer::initialize(GLFWwindow* window_) {
 
     setupOpenGL();
 
-    glViewport(0, 0, width, height);
-
     // Enable VSync
     glfwSwapInterval(1);
 
@@ -85,102 +70,47 @@ bool Renderer::initialize(GLFWwindow* window_) {
     return true;
 }
 
-void Renderer::cleanup() {
-    if (shaderProgram != 0) {
-        glDeleteProgram(shaderProgram);
-        shaderProgram = 0;
-    }
-    if (vao != 0) {
-        glDeleteVertexArrays(1, &vao);
-        vao = 0;
-    }
-    if (vbo != 0) {
-        glDeleteBuffers(1, &vbo);
-        vbo = 0;
-    }
-}
-
 void Renderer::setupOpenGL() {
+    // Enable alpha blending
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Enable antialiasing
+    glEnable(GL_MULTISAMPLE);
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+
     // Set up viewport and projection
     glViewport(0, 0, width, height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, width, height, 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
 
-    // Compile shaders
-    const char* vertexShaderSource = R"(
-        #version 330 core
-        out vec2 TexCoords;
-        void main() {
-            const vec2 positions[4] = vec2[](
-                vec2(-1.0, -1.0),
-                vec2( 1.0, -1.0),
-                vec2(-1.0,  1.0),
-                vec2( 1.0,  1.0)
-            );
-            TexCoords = positions[gl_VertexID].xy * 0.5 + 0.5;
-            gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
-        }
-    )";
-
-    const char* fragmentShaderSource = R"(
-        #version 330 core
-        in vec2 TexCoords;
-        out vec4 FragColor;
-        uniform sampler2D screenTexture;
-        void main() {
-            FragColor = texture(screenTexture, TexCoords);
-        }
-    )";
-
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
-    glCompileShader(vertexShader);
-
-    // Check for compilation errors
-    GLint success;
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        throw std::runtime_error("Failed to compile vertex shader");
-    }
-
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
-    glCompileShader(fragmentShader);
-
-    // Check for compilation errors
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        throw std::runtime_error("Failed to compile fragment shader");
-    }
-
-    // Link shaders into a program
-    shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    // Check for linking errors
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        throw std::runtime_error("Failed to link shader program");
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-    // Create VAO and VBO
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-
-    // No need to create VBO since we're using gl_VertexID
-
-    glBindVertexArray(0);
+    // Set background color (white)
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-void Renderer::render(double fps) {
+void Renderer::render(const std::vector<Ball>& balls, double fps) {
     // Clear the screen
     glClear(GL_COLOR_BUFFER_BIT);
+    glLoadIdentity();
 
-    // Render the texture
-    renderTexture();
+    // Draw all balls with Z-ordering (larger balls first)
+    std::vector<const Ball*> sortedBalls;
+    sortedBalls.reserve(balls.size());
+    for (const auto& ball : balls) {
+        sortedBalls.push_back(&ball);
+    }
+
+    // Sort by radius (descending) for proper transparency
+    std::sort(sortedBalls.begin(), sortedBalls.end(),
+              [](const Ball* a, const Ball* b) { return a->radius > b->radius; });
+
+    // Draw balls
+    for (const Ball* ball : sortedBalls) {
+        drawBall(*ball);
+    }
 
     // Draw FPS counter
     renderFPS(fps);
@@ -190,30 +120,123 @@ void Renderer::render(double fps) {
     glfwPollEvents();
 }
 
-void Renderer::renderTexture() {
-    glUseProgram(shaderProgram);
-    glBindVertexArray(vao);
+void Renderer::drawBall(const Ball& ball) {
+    // Draw filled circle
+    drawCircle(
+        ball.position.x,
+        ball.position.y,
+        ball.radius,
+        ball.color,
+        0.7f  // Alpha for main ball
+    );
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, gpuManager.getTextureID());
+    // Draw outline with slightly darker color
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
 
-    // Set the uniform
-    glUniform1i(glGetUniformLocation(shaderProgram, "screenTexture"), 0);
+    float r = ((ball.color >> 16) & 0xFF) / 255.0f * 0.8f;
+    float g = ((ball.color >> 8) & 0xFF) / 255.0f * 0.8f;
+    float b = (ball.color & 0xFF) / 255.0f * 0.8f;
+    glColor4f(r, g, b, 0.7f);
 
-    // Draw full-screen quad
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    for (int i = 0; i < CIRCLE_SEGMENTS; ++i) {
+        float angle = i * 2.0f * PI / CIRCLE_SEGMENTS;
+        float x = ball.position.x + ball.radius * std::cos(angle);
+        float y = ball.position.y + ball.radius * std::sin(angle);
+        glVertex2f(x, y);
+    }
 
-    glBindVertexArray(0);
-    glUseProgram(0);
+    glEnd();
+}
+
+void Renderer::drawCircle(float x, float y, float radius, uint32_t color, float alpha) {
+    float r = ((color >> 16) & 0xFF) / 255.0f;
+    float g = ((color >> 8) & 0xFF) / 255.0f;
+    float b = (color & 0xFF) / 255.0f;
+
+    glColor4f(r, g, b, alpha);
+    glBegin(GL_TRIANGLE_FAN);
+
+    // Center point
+    glVertex2f(x, y);
+
+    // Circle vertices
+    for (int i = 0; i <= CIRCLE_SEGMENTS; ++i) {
+        float angle = i * 2.0f * PI / CIRCLE_SEGMENTS;
+        float px = x + radius * std::cos(angle);
+        float py = y + radius * std::sin(angle);
+        glVertex2f(px, py);
+    }
+
+    glEnd();
 }
 
 void Renderer::renderFPS(double fps) {
-    // Implement FPS rendering if needed
-    // For simplicity, we'll omit text rendering in this example
+    std::stringstream ss;
+    ss << "FPS: " << std::fixed << std::setprecision(1) << fps;
+
+    glColor4f(0.0f, 0.0f, 0.0f, 1.0f); // Black text
+    drawText(ss.str(), 10.0f, 20.0f, TEXT_SCALE);
+}
+
+void Renderer::drawText(const std::string& text, float x, float y, float scale) {
+    glPushMatrix();
+    glTranslatef(x, y, 0.0f);
+    glScalef(scale, scale, 1.0f);
+
+    glLineWidth(2.0f);
+    float charWidth = 8.0f;
+
+    for (char c : text) {
+        glBegin(GL_LINES);
+        switch (c) {
+            case 'F':
+                glVertex2f(0, 0); glVertex2f(0, 10);
+                glVertex2f(0, 0); glVertex2f(6, 0);
+                glVertex2f(0, 5); glVertex2f(4, 5);
+                break;
+            case 'P':
+                glVertex2f(0, 0); glVertex2f(0, 10);
+                glVertex2f(0, 0); glVertex2f(6, 0);
+                glVertex2f(6, 0); glVertex2f(6, 5);
+                glVertex2f(0, 5); glVertex2f(6, 5);
+                break;
+            case 'S':
+                glVertex2f(6, 0); glVertex2f(0, 0);
+                glVertex2f(0, 0); glVertex2f(0, 5);
+                glVertex2f(0, 5); glVertex2f(6, 5);
+                glVertex2f(6, 5); glVertex2f(6, 10);
+                glVertex2f(6, 10); glVertex2f(0, 10);
+                break;
+            case ':':
+                glVertex2f(2, 3); glVertex2f(2, 4);
+                glVertex2f(2, 7); glVertex2f(2, 8);
+                break;
+            case '.':
+                glVertex2f(2, 0); glVertex2f(2, 1);
+                break;
+            case '0': case '1': case '2': case '3': case '4':
+            case '5': case '6': case '7': case '8': case '9':
+                glVertex2f(0, 0); glVertex2f(6, 0);
+                glVertex2f(0, 0); glVertex2f(0, 10);
+                glVertex2f(6, 0); glVertex2f(6, 10);
+                glVertex2f(0, 10); glVertex2f(6, 10);
+                break;
+        }
+        glEnd();
+
+        glTranslatef(charWidth, 0.0f, 0.0f);
+    }
+
+    glPopMatrix();
 }
 
 void Renderer::framebufferSizeCallback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, width, height, 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
 }
 
 bool Renderer::shouldClose() const {
@@ -221,4 +244,3 @@ bool Renderer::shouldClose() const {
 }
 
 } // namespace sim
-
