@@ -1,6 +1,9 @@
 #ifndef BOUNCING_BALLS_GPU_MANAGER_H
 #define BOUNCING_BALLS_GPU_MANAGER_H
 
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
 #define CL_HPP_ENABLE_EXCEPTIONS
 #define CL_HPP_TARGET_OPENCL_VERSION 200
 #include <CL/opencl.hpp>
