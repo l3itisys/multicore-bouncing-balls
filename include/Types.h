@@ -120,7 +120,3 @@ public:
 }
 
 #endif // BOUNCING_BALLS_TYPES_H
-cmake_minimum_required(VERSION 3.10)
-project(BouncingBalls)
-
-add_subdirectory(multicore-bouncing-balls)
