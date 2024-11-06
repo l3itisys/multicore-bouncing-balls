@@ -26,22 +26,34 @@ float length_squared(float2 v) {
     return dot(v, v);
 }
 
-// Physics update kernel - one thread per ball
+// Physics update kernel - multiple threads per ball for better parallelism
 __kernel void updateBallPhysics(
     __global Ball* balls,
     __constant SimConstants* constants,
     const int numBalls
 ) {
     int gid = get_global_id(0);
-    if (gid >= numBalls) return;
+    int localId = get_local_id(0);
+    int groupId = get_group_id(0);
+    int localSize = get_local_size(0);
+    
+    // Each workgroup handles one ball's physics
+    int ballIndex = groupId;
+    if (ballIndex >= numBalls) return;
 
-    Ball ball = balls[gid];
+    // Load ball data into local memory for faster access
+    __local Ball localBall;
+    if (localId == 0) {
+        localBall = balls[ballIndex];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-    // Update velocity (gravity)
-    ball.velocity.y += constants->gravity * constants->dt;
-
-    // Update position
-    ball.position += ball.velocity * constants->dt;
+    // Update velocity (gravity) - only one thread per workgroup
+    if (localId == 0) {
+        localBall.velocity.y += constants->gravity * constants->dt;
+        localBall.position += localBall.velocity * constants->dt;
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
 
     // Handle boundaries with restitution
     if (ball.position.x - ball.radius < 0.0f) {

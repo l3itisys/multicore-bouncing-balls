@@ -48,7 +48,8 @@ private:
     bool initialized = false;
 
     // Constants
-    static constexpr size_t WORKGROUP_SIZE = 256;
+    static constexpr size_t WORKGROUP_SIZE = 512; // Increased for better parallelism
+    static constexpr size_t THREADS_PER_BALL = 64; // Multiple threads per ball
     static constexpr const char* KERNEL_FILENAME = "simulation.cl";
 };
 
