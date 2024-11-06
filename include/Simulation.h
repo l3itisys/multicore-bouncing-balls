@@ -68,6 +68,9 @@ private:
         std::atomic<double> renderTime{0.0};
         std::atomic<int> activeThreads{0};
     } metrics;
+
+    // State synchronization flag
+    std::atomic<bool> needsStateSynchronization{false};
 };
 
 } // namespace sim

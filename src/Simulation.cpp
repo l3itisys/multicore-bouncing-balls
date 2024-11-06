@@ -73,6 +73,10 @@ void Simulation::controlThreadFunc() {
     const auto frameInterval = std::chrono::duration_cast<clock::duration>(
         duration(DISPLAY_DT)
     );
+    
+    // Pre-allocate display buffer to avoid reallocations
+    std::vector<Ball> displayBuffer;
+    displayBuffer.reserve(balls.size());
 
     int frameCount = 0;
     auto lastFpsUpdate = clock::now();
@@ -162,8 +166,15 @@ void Simulation::computationThreadFunc() {
 }
 
 void Simulation::updatePhysics() {
-    std::lock_guard<std::mutex> lock(ballsMutex);
+    // Lock-free physics update using double buffering
     gpuManager.updateSimulation(balls, constants);
+    
+    // Only lock when absolutely necessary to sync state
+    if (needsStateSynchronization) {
+        std::lock_guard<std::mutex> lock(ballsMutex);
+        synchronizeState();
+        needsStateSynchronization = false;
+    }
 }
 
 void Simulation::updateDisplay() {
