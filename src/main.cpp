@@ -82,7 +82,9 @@ int main(int argc, char* argv[]) {
 
         // Initialize GLEW
         glewExperimental = GL_TRUE;
-        if (glewInit() != GLEW_OK) {
+        GLenum err = glewInit();
+        if (err != GLEW_OK) {
+            std::cerr << "GLEW initialization failed: " << glewGetErrorString(err) << std::endl;
             glfwDestroyWindow(window);
             glfwTerminate();
             throw std::runtime_error("Failed to initialize GLEW");

@@ -1,8 +1,8 @@
 #ifndef BOUNCING_BALLS_SIMULATION_H
 #define BOUNCING_BALLS_SIMULATION_H
 
-#include "Types.h"
 #include "GPUManager.h"
+#include "Types.h"
 #include <vector>
 #include <thread>
 #include <memory>
