@@ -199,9 +199,9 @@ void Simulation::initializeBalls(int numBalls) {
     };
 
     const std::array<BallConfig, 3> configs = {{
-        {50.0f, 5.0f},   // Small
-        {100.0f, 10.0f}, // Medium
-        {150.0f, 15.0f}  // Large
+        {15.0f, 5.0f},   // Small
+        {20.0f, 10.0f},  // Medium
+        {25.0f, 15.0f}   // Large
     }};
 
     const std::array<uint32_t, 3> colors = {
@@ -216,7 +216,7 @@ void Simulation::initializeBalls(int numBalls) {
     std::uniform_int_distribution<size_t> colorDist(0, colors.size() - 1);
 
     balls.reserve(numBalls);
-    const int maxAttempts = 100;
+    const int maxAttempts = 1000;
 
     for (int i = 0; i < numBalls; ++i) {
         Ball ball{};
@@ -245,7 +245,7 @@ void Simulation::initializeBalls(int numBalls) {
             for (const auto& existingBall : balls) {
                 float dx = existingBall.position.x - ball.position.x;
                 float dy = existingBall.position.y - ball.position.y;
-                float minDist = (existingBall.radius + ball.radius) * MIN_DISTANCE_FACTOR;
+                float minDist = (existingBall.radius + ball.radius) * 1.05f; // Reduced spacing between balls
 
                 if (dx * dx + dy * dy < minDist * minDist) {
                     validPosition = false;
