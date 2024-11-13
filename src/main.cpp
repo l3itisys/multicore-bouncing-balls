@@ -36,10 +36,10 @@ int main(int argc, char* argv[]) {
         const int screenHeight = 900;
 
         // Get number of balls from command line
-        int numBalls = 5;  // Default
+        int numBalls = 50;  // Default increased
         if (argc > 1) {
             try {
-                numBalls = std::clamp(std::stoi(argv[1]), 3, 100);
+                numBalls = std::clamp(std::stoi(argv[1]), 3, 200);
             } catch (const std::exception& e) {
                 std::cerr << "Invalid input. Using default " << numBalls << " balls.\n";
             }
