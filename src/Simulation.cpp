@@ -199,9 +199,9 @@ void Simulation::initializeBalls(int numBalls) {
     };
 
     const std::array<BallConfig, 3> configs = {{
-        {15.0f, 5.0f},   // Small
-        {20.0f, 10.0f},  // Medium
-        {25.0f, 15.0f}   // Large
+        {50.0f, 5.0f},   // Small
+        {100.0f, 10.0f},  // Medium
+        {150.0f, 15.0f}   // Large
     }};
 
     const std::array<uint32_t, 3> colors = {
