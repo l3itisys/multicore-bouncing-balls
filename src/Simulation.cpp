@@ -192,14 +192,14 @@ void Simulation::initializeBalls(int numBalls) {
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    // Ball configurations
+    // Ball configurations with adjusted sizes
     struct BallConfig {
         float radius;
         float mass;
     };
 
     const std::array<BallConfig, 3> configs = {{
-        {50.0f, 5.0f},   // Small
+        {50.0f, 5.0f},    // Small
         {100.0f, 10.0f},  // Medium
         {150.0f, 15.0f}   // Large
     }};
@@ -216,7 +216,13 @@ void Simulation::initializeBalls(int numBalls) {
     std::uniform_int_distribution<size_t> colorDist(0, colors.size() - 1);
 
     balls.reserve(numBalls);
-    const int maxAttempts = 1000;
+    const int maxAttempts = 2000; // Increased max attempts
+
+    // Create a grid for ball placement
+    const int gridCols = 5;
+    const int gridRows = 4;
+    const float cellWidth = constants.screenDimensions.x / gridCols;
+    const float cellHeight = constants.screenDimensions.y / gridRows;
 
     for (int i = 0; i < numBalls; ++i) {
         Ball ball{};
@@ -226,39 +232,41 @@ void Simulation::initializeBalls(int numBalls) {
         ball.mass = config.mass;
         ball.color = colors[colorDist(gen)];
 
-        // Position distributions
-        std::uniform_real_distribution<float> posX(
-            ball.radius,
-            constants.screenDimensions.x - ball.radius
-        );
-        std::uniform_real_distribution<float> posY(
-            ball.radius,
-            constants.screenDimensions.y - ball.radius
-        );
-
-        // Place ball without overlap
+        // Try placing in each grid cell
         bool validPosition = false;
-        for (int attempt = 0; attempt < maxAttempts && !validPosition; ++attempt) {
-            validPosition = true;
-            ball.position = Vec2(posX(gen), posY(gen));
+        for (int gridY = 0; gridY < gridRows && !validPosition; ++gridY) {
+            for (int gridX = 0; gridX < gridCols && !validPosition; ++gridX) {
+                // Calculate cell boundaries
+                float cellLeft = gridX * cellWidth;
+                float cellRight = (gridX + 1) * cellWidth;
+                float cellTop = gridY * cellHeight;
+                float cellBottom = (gridY + 1) * cellHeight;
 
-            for (const auto& existingBall : balls) {
-                float dx = existingBall.position.x - ball.position.x;
-                float dy = existingBall.position.y - ball.position.y;
-                float minDist = (existingBall.radius + ball.radius) * 1.02f; // Reduced spacing factor further
+                // Adjust for ball radius
+                cellLeft += ball.radius;
+                cellRight -= ball.radius;
+                cellTop += ball.radius;
+                cellBottom -= ball.radius;
 
-                if (dx * dx + dy * dy < minDist * minDist) {
-                    validPosition = false;
-                    // Try to place ball in a different quadrant
-                    posX = std::uniform_real_distribution<float>(
-                        (attempt % 2) ? ball.radius : constants.screenDimensions.x/2,
-                        (attempt % 2) ? constants.screenDimensions.x/2 : constants.screenDimensions.x - ball.radius
-                    );
-                    posY = std::uniform_real_distribution<float>(
-                        (attempt / 2 % 2) ? ball.radius : constants.screenDimensions.y/2,
-                        (attempt / 2 % 2) ? constants.screenDimensions.y/2 : constants.screenDimensions.y - ball.radius
-                    );
-                    break;
+                // Create position distributions for this cell
+                std::uniform_real_distribution<float> posX(cellLeft, cellRight);
+                std::uniform_real_distribution<float> posY(cellTop, cellBottom);
+
+                // Try multiple positions within this cell
+                for (int attempt = 0; attempt < maxAttempts/20 && !validPosition; ++attempt) {
+                    validPosition = true;
+                    ball.position = Vec2(posX(gen), posY(gen));
+
+                    for (const auto& existingBall : balls) {
+                        float dx = existingBall.position.x - ball.position.x;
+                        float dy = existingBall.position.y - ball.position.y;
+                        float minDist = (existingBall.radius + ball.radius) * 1.01f; // Further reduced spacing
+
+                        if (dx * dx + dy * dy < minDist * minDist) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
                 }
             }
         }
