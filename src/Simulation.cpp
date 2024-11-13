@@ -192,16 +192,16 @@ void Simulation::initializeBalls(int numBalls) {
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    // Ball configurations with adjusted sizes
+    // Ball configurations with smaller sizes
     struct BallConfig {
         float radius;
         float mass;
     };
 
     const std::array<BallConfig, 3> configs = {{
-        {50.0f, 5.0f},    // Small
-        {100.0f, 10.0f},  // Medium
-        {150.0f, 15.0f}   // Large
+        {25.0f, 5.0f},    // Small
+        {35.0f, 10.0f},   // Medium
+        {45.0f, 15.0f}    // Large
     }};
 
     const std::array<uint32_t, 3> colors = {
@@ -218,9 +218,9 @@ void Simulation::initializeBalls(int numBalls) {
     balls.reserve(numBalls);
     const int maxAttempts = 2000; // Increased max attempts
 
-    // Create a grid for ball placement
-    const int gridCols = 5;
-    const int gridRows = 4;
+    // Create a finer grid for ball placement
+    const int gridCols = 8;
+    const int gridRows = 6;
     const float cellWidth = constants.screenDimensions.x / gridCols;
     const float cellHeight = constants.screenDimensions.y / gridRows;
 
