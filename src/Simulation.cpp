@@ -245,10 +245,19 @@ void Simulation::initializeBalls(int numBalls) {
             for (const auto& existingBall : balls) {
                 float dx = existingBall.position.x - ball.position.x;
                 float dy = existingBall.position.y - ball.position.y;
-                float minDist = (existingBall.radius + ball.radius) * 1.05f; // Reduced spacing between balls
+                float minDist = (existingBall.radius + ball.radius) * 1.02f; // Reduced spacing factor further
 
                 if (dx * dx + dy * dy < minDist * minDist) {
                     validPosition = false;
+                    // Try to place ball in a different quadrant
+                    posX = std::uniform_real_distribution<float>(
+                        (attempt % 2) ? ball.radius : constants.screenDimensions.x/2,
+                        (attempt % 2) ? constants.screenDimensions.x/2 : constants.screenDimensions.x - ball.radius
+                    );
+                    posY = std::uniform_real_distribution<float>(
+                        (attempt / 2 % 2) ? ball.radius : constants.screenDimensions.y/2,
+                        (attempt / 2 % 2) ? constants.screenDimensions.y/2 : constants.screenDimensions.y - ball.radius
+                    );
                     break;
                 }
             }
