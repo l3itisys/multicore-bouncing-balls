@@ -109,7 +109,6 @@ void GPUManager::createContext() {
 
         // Create context with explicit device
         cl_int error = CL_SUCCESS;
-        cl_device_id deviceId = device();
 
         // Get current GL context properties for verification
         std::cout << "Current GL context properties:" << std::endl;

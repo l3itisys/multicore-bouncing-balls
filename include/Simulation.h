@@ -18,44 +18,7 @@ namespace sim {
 class Simulation {
 public:
     // Constructor/Destructor
-    Simulation(int numBalls, float screenWidth, float screenHeight)
-        : renderer(static_cast<int>(screenWidth), static_cast<int>(screenHeight))
-        , screenWidth(screenWidth)
-        , screenHeight(screenHeight) {
-        try {
-            initializeBalls(numBalls);
-            validateConfig();
-
-            // Initialize double buffer frames
-            pipeline.currentFrame.balls = balls;
-            pipeline.nextFrame.balls = balls;
-
-            // Initialize renderer first to create OpenGL context
-            if (!renderer.initialize()) {
-                throw std::runtime_error("Failed to initialize renderer");
-            }
-
-            // Now initialize GPU manager after OpenGL context is created
-            gpuManager.initialize(
-                balls.size(),
-                static_cast<int>(screenWidth),
-                static_cast<int>(screenHeight)
-            );
-
-            // Initialize monitoring
-            monitoringState.frameTimes.resize(MonitoringState::FRAME_TIME_HISTORY);
-
-            std::cout << "Simulation initialized with pipeline architecture:\n"
-                      << "- Number of balls: " << balls.size() << "\n"
-                      << "- Physics rate: " << PHYSICS_RATE << " Hz\n"
-                      << "- Display rate: " << DISPLAY_RATE << " Hz\n"
-                      << "- Screen size: " << screenWidth << "x" << screenHeight << "\n"
-                      << "- Double buffering enabled\n";
-        } catch (const std::exception& e) {
-            handleError(e, "Initialization");
-            throw;
-        }
-    }
+    Simulation(int numBalls, float screenWidth, float screenHeight);
     ~Simulation();
 
     // Prevent copying
