@@ -93,11 +93,11 @@ void GPUManager::createContext() {
         std::string vendorName = platform.getInfo<CL_PLATFORM_VENDOR>();
         std::cout << "Using platform: " << platformName << " from " << vendorName << std::endl;
 
-        // Create properties - for Intel, order of properties matters
+        // Create properties for Intel GPU - specific order required
         cl_context_properties props[] = {
-            CL_GL_CONTEXT_KHR,  (cl_context_properties)glxContext,
+            CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
             CL_GLX_DISPLAY_KHR, (cl_context_properties)display,
-            CL_CONTEXT_PLATFORM,(cl_context_properties)platform(),
+            CL_GL_CONTEXT_KHR, (cl_context_properties)glxContext,
             0
         };
 
@@ -116,14 +116,22 @@ void GPUManager::createContext() {
         glXQueryContext(display, glxContext, GLX_RENDER_TYPE, &glxAttrib);
         std::cout << "GLX_RENDER_TYPE: " << glxAttrib << std::endl;
 
-        // Try creating context with single device
-        context = cl::Context(
-            {device},
-            props,
-            nullptr,
-            nullptr,
-            &error
-        );
+        // Create context with explicit device list and properties
+        std::vector<cl::Device> devices = {device};
+        context = cl::Context(devices, props, nullptr, nullptr, &error);
+        
+        if (error != CL_SUCCESS) {
+            // Fallback: try creating context without GL sharing
+            std::cout << "Warning: Failed to create OpenCL context with GL sharing, "
+                     << "falling back to compute-only context" << std::endl;
+                     
+            cl_context_properties basic_props[] = {
+                CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
+                0
+            };
+            
+            context = cl::Context(devices, basic_props, nullptr, nullptr, &error);
+        }
 
         if (error != CL_SUCCESS) {
             std::stringstream ss;
