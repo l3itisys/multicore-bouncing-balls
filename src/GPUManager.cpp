@@ -89,10 +89,16 @@ void GPUManager::createContext() {
         Display* display = glXGetCurrentDisplay();
         GLXContext glxContext = glXGetCurrentContext();
 
-        // Create a basic compute context
+        if (!display || !glxContext) {
+            throw std::runtime_error("No active OpenGL context found");
+        }
+
+        // Create context with GL sharing
         cl_int error = CL_SUCCESS;
         cl_context_properties props[] = {
             CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
+            CL_GLX_DISPLAY_KHR, (cl_context_properties)display,
+            CL_GL_CONTEXT_KHR, (cl_context_properties)glxContext,
             0
         };
 
@@ -172,11 +178,31 @@ void GPUManager::setupOpenGLInterop() {
         // Create OpenCL image from OpenGL texture
         glInterop.textureCL = cl::Image2D(
             context,
-            CL_MEM_READ_WRITE,
+            CL_MEM_WRITE_ONLY,
             cl::ImageFormat(CL_RGBA, CL_UNORM_INT8),
             screenDimensions.width,
-            screenDimensions.height
+            screenDimensions.height,
+            0, nullptr, &error
         );
+
+        if (error != CL_SUCCESS) {
+            throw cl::Error(error, "Failed to create OpenCL image");
+        }
+
+        // Create OpenCL-GL texture interop
+        glFinish();  // Ensure GL is done
+        glInterop.textureCL = cl::ImageGL(
+            context,
+            CL_MEM_WRITE_ONLY,
+            GL_TEXTURE_2D,
+            0,
+            glInterop.textureId,
+            &error
+        );
+
+        if (error != CL_SUCCESS) {
+            throw cl::Error(error, "Failed to create OpenCL-GL interop");
+        }
 
         glInterop.initialized = true;
     } catch (const cl::Error& e) {
@@ -279,6 +305,15 @@ void GPUManager::createBuffers(size_t numBalls, int /*screenWidth*/, int /*scree
 void GPUManager::updateSimulation(std::vector<Ball>& balls, const SimConstants& constants) {
     try {
         startProfiling();
+
+        // Ensure OpenGL is done
+        glFinish();
+
+        // Acquire GL objects
+        if (glInterop.initialized) {
+            std::vector<cl::Memory> glObjects = {glInterop.textureCL};
+            computeQueue.enqueueAcquireGLObjects(&glObjects);
+        }
 
         // Write data to device (non-blocking)
         transferQueue.enqueueWriteBuffer(
