@@ -28,7 +28,6 @@ namespace sim {
 
 // Forward declarations
 class GPUManager;
-class Renderer;
 class Simulation;
 
 // Frame state enumeration

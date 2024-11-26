@@ -4,6 +4,8 @@
 #include "Types.h"
 #include "Config.h"
 #include "GPUManager.h"
+#include "Renderer.h"
+#include <iostream>
 #include <vector>
 #include <thread>
 #include <memory>
