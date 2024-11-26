@@ -10,63 +10,6 @@
 #include <csignal>
 #include <cstring>
 
-void setupGLWindow(int width, int height, GLFWwindow** window) {
-    // Initialize GLFW
-    if (!glfwInit()) {
-        throw std::runtime_error("Failed to initialize GLFW");
-    }
-
-    // Set error callback
-    glfwSetErrorCallback([](int error, const char* description) {
-        std::cerr << "GLFW Error " << error << ": " << description << std::endl;
-    });
-
-    // Try to get primary monitor's video mode
-    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-    
-    // Configure GLFW window hints for Intel
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_SAMPLES, 0);  // Disable MSAA initially
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
-    
-    // Create window
-    *window = glfwCreateWindow(width, height, "2D Bouncing Balls Simulation", nullptr, nullptr);
-    if (!*window) {
-        glfwTerminate();
-        throw std::runtime_error("Failed to create GLFW window");
-    }
-
-    // Make OpenGL context current
-    glfwMakeContextCurrent(*window);
-
-    // Initialize GLEW
-    glewExperimental = GL_TRUE;
-    GLenum err = glewInit();
-    if (err != GLEW_OK) {
-        glfwDestroyWindow(*window);
-        glfwTerminate();
-        throw std::runtime_error(std::string("Failed to initialize GLEW: ") + 
-                               (const char*)glewGetErrorString(err));
-    }
-
-    // Get and print OpenGL info
-    std::cout << "OpenGL Info:\n"
-              << "  Vendor: " << glGetString(GL_VENDOR) << "\n"
-              << "  Renderer: " << glGetString(GL_RENDERER) << "\n"
-              << "  Version: " << glGetString(GL_VERSION) << "\n"
-              << "  GLSL Version: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
-
-    // Setup basic OpenGL state
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-    
-    // Enable vsync
-    glfwSwapInterval(1);
-}
 
 // Global flag for graceful shutdown
 volatile std::sig_atomic_t g_running = 1;
@@ -338,16 +281,9 @@ int main(int argc, char* argv[]) {
         auto config = parseCommandLine(argc, argv);
         printSystemInfo();
 
-        GLFWwindow* window = nullptr;
-        setupGLWindow(config.width, config.height, &window);
-
         // Create and run simulation
         SimulationApp app(config.numBalls, config.width, config.height);
         app.run();
-
-        // Cleanup
-        glfwDestroyWindow(window);
-        glfwTerminate();
         return 0;
     } catch (const cl::Error& e) {
         std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")\n";
