@@ -85,15 +85,12 @@ void GPUManager::createContext() {
         std::string vendorName = platform.getInfo<CL_PLATFORM_VENDOR>();
         std::cout << "Using platform: " << platformName << " from " << vendorName << std::endl;
 
-        // Create properties for Intel GPU - specific order required
-        cl_context_properties props[] = {
-            CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
-            CL_GLX_DISPLAY_KHR, (cl_context_properties)display,
-            CL_GL_CONTEXT_KHR, (cl_context_properties)glxContext,
-            0
-        };
+        // Get current display and context
+        Display* display = glXGetCurrentDisplay();
+        GLXContext glxContext = glXGetCurrentContext();
 
-        // Create a basic compute context without GL sharing
+        // Create a basic compute context
+        cl_int error = CL_SUCCESS;
         cl_context_properties props[] = {
             CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
             0
