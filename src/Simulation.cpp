@@ -29,7 +29,12 @@ Simulation::Simulation(int numBalls, float screenWidth_, float screenHeight_)
         pipeline.currentFrame.balls = balls;
         pipeline.nextFrame.balls = balls;
 
-        // Initialize GPU manager
+        // Initialize renderer first to create OpenGL context
+        if (!renderer.initialize()) {
+            throw std::runtime_error("Failed to initialize renderer");
+        }
+
+        // Now initialize GPU manager after OpenGL context is created
         gpuManager.initialize(
             balls.size(),
             static_cast<int>(screenWidth),
