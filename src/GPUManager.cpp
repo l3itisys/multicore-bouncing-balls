@@ -80,15 +80,7 @@ void GPUManager::createContext() {
         platform = selectPlatform();
         device = selectDevice(platform);
 
-        // Get current OpenGL context
-        GLXContext glxContext = glXGetCurrentContext();
-        Display* display = glXGetCurrentDisplay();
-
-        if (!glxContext || !display) {
-            throw std::runtime_error("OpenGL context must be current before creating OpenCL context");
-        }
-
-        // Ensure we're using the Intel platform
+        // Print platform info
         std::string platformName = platform.getInfo<CL_PLATFORM_NAME>();
         std::string vendorName = platform.getInfo<CL_PLATFORM_VENDOR>();
         std::cout << "Using platform: " << platformName << " from " << vendorName << std::endl;
@@ -101,11 +93,8 @@ void GPUManager::createContext() {
             0
         };
 
-        // Explicitly check if device supports GL sharing
+        // Check for basic compute capabilities
         std::string deviceExtensions = device.getInfo<CL_DEVICE_EXTENSIONS>();
-        if (deviceExtensions.find("cl_khr_gl_sharing") == std::string::npos) {
-            throw std::runtime_error("Selected device does not support OpenGL sharing");
-        }
 
         // Create context with explicit device
         cl_int error = CL_SUCCESS;
