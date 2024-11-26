@@ -11,7 +11,8 @@
 namespace sim {
 
 Simulation::Simulation(int numBalls, float screenWidth_, float screenHeight_)
-    : screenWidth(screenWidth_)
+    : renderer(static_cast<int>(screenWidth_), static_cast<int>(screenHeight_))
+    , screenWidth(screenWidth_)
     , screenHeight(screenHeight_)
 {
     // Initialize simulation constants
