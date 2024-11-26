@@ -93,34 +93,14 @@ void GPUManager::createContext() {
             0
         };
 
-        // Check for basic compute capabilities
-        std::string deviceExtensions = device.getInfo<CL_DEVICE_EXTENSIONS>();
+        // Create a basic compute context without GL sharing
+        cl_context_properties props[] = {
+            CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
+            0
+        };
 
-        // Create context with explicit device
-        cl_int error = CL_SUCCESS;
-
-        // Get current GL context properties for verification
-        std::cout << "Current GL context properties:" << std::endl;
-        int glxAttrib;
-        glXQueryContext(display, glxContext, GLX_RENDER_TYPE, &glxAttrib);
-        std::cout << "GLX_RENDER_TYPE: " << glxAttrib << std::endl;
-
-        // Create context with explicit device list and properties
         std::vector<cl::Device> devices = {device};
         context = cl::Context(devices, props, nullptr, nullptr, &error);
-        
-        if (error != CL_SUCCESS) {
-            // Fallback: try creating context without GL sharing
-            std::cout << "Warning: Failed to create OpenCL context with GL sharing, "
-                     << "falling back to compute-only context" << std::endl;
-                     
-            cl_context_properties basic_props[] = {
-                CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
-                0
-            };
-            
-            context = cl::Context(devices, basic_props, nullptr, nullptr, &error);
-        }
 
         if (error != CL_SUCCESS) {
             std::stringstream ss;
