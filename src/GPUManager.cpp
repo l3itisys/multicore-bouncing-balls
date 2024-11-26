@@ -176,6 +176,7 @@ void GPUManager::setupOpenGLInterop() {
         glBindTexture(GL_TEXTURE_2D, 0);
 
         // Create OpenCL image from OpenGL texture
+        cl_int error;
         glInterop.textureCL = cl::Image2D(
             context,
             CL_MEM_WRITE_ONLY,
@@ -191,6 +192,7 @@ void GPUManager::setupOpenGLInterop() {
 
         // Create OpenCL-GL texture interop
         glFinish();  // Ensure GL is done
+        error = CL_SUCCESS;
         glInterop.textureCL = cl::ImageGL(
             context,
             CL_MEM_WRITE_ONLY,
