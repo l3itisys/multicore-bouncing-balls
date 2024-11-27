@@ -1,4 +1,3 @@
-// Data structures matching CPU-side definitions
 typedef struct {
     float2 position;
     float2 velocity;
@@ -17,184 +16,89 @@ typedef struct {
     float2 reserved;
 } SimConstants;
 
-// Helper functions
-float2 make_float2(float x, float y) {
-    return (float2)(x, y);
-}
-
-float length_squared(float2 v) {
-    return dot(v, v);
-}
-
-// Physics update kernel - one thread per ball
 __kernel void updateBallPhysics(
     __global Ball* balls,
     __constant SimConstants* constants,
     const int numBalls
 ) {
-    int gid = get_global_id(0);
-    if (gid >= numBalls) return;
+    int i = get_global_id(0);
+    if (i >= numBalls) return;
 
-    Ball ball = balls[gid];
+    Ball ball = balls[i];
+    float dt = constants->dt;
+    float gravity = constants->gravity;
+    float2 screenDim = constants->screenDimensions;
 
-    // Update velocity (gravity)
-    ball.velocity.y += constants->gravity * constants->dt;
+    // Update velocity and position
+    ball.velocity.y += gravity * dt;  // Add gravity (positive Y is down)
+    ball.position.x += ball.velocity.x * dt;
+    ball.position.y += ball.velocity.y * dt;
 
-    // Update position
-    ball.position += ball.velocity * constants->dt;
+    // Boundary collision with proper position clamping
+    float restitution = constants->restitution;
 
-    // Handle boundaries with restitution
+    // Horizontal boundaries
     if (ball.position.x - ball.radius < 0.0f) {
         ball.position.x = ball.radius;
-        ball.velocity.x = fabs(ball.velocity.x) * constants->restitution;
+        ball.velocity.x = fabs(ball.velocity.x) * restitution;
     }
-    else if (ball.position.x + ball.radius > constants->screenDimensions.x) {
-        ball.position.x = constants->screenDimensions.x - ball.radius;
-        ball.velocity.x = -fabs(ball.velocity.x) * constants->restitution;
+    else if (ball.position.x + ball.radius > screenDim.x) {
+        ball.position.x = screenDim.x - ball.radius;
+        ball.velocity.x = -fabs(ball.velocity.x) * restitution;
     }
 
+    // Vertical boundaries
     if (ball.position.y - ball.radius < 0.0f) {
         ball.position.y = ball.radius;
-        ball.velocity.y = fabs(ball.velocity.y) * constants->restitution;
+        ball.velocity.y = fabs(ball.velocity.y) * restitution;
     }
-    else if (ball.position.y + ball.radius > constants->screenDimensions.y) {
-        ball.position.y = constants->screenDimensions.y - ball.radius;
-        ball.velocity.y = -fabs(ball.velocity.y) * constants->restitution;
+    else if (ball.position.y + ball.radius > screenDim.y) {
+        ball.position.y = screenDim.y - ball.radius;
+        ball.velocity.y = -fabs(ball.velocity.y) * restitution;
     }
 
-    balls[gid] = ball;
+    balls[i] = ball;
 }
 
-// Pixel update kernel - multiple threads for rendering
-__kernel void updateBallPixels(
-    __global Ball* balls,
-    __global uchar4* pixelBuffer,
-    __constant SimConstants* constants,
-    const int width,
-    const int height,
-    const int numBalls
-) {
-    int gid = get_global_id(0);
-    int totalThreads = get_global_size(0);
-
-    // Each thread processes multiple pixels
-    for (int ballIndex = 0; ballIndex < numBalls; ballIndex++) {
-        Ball ball = balls[ballIndex];
-
-        // Calculate ball's bounding box
-        int minX = max(0, (int)(ball.position.x - ball.radius));
-        int maxX = min(width - 1, (int)(ball.position.x + ball.radius));
-        int minY = max(0, (int)(ball.position.y - ball.radius));
-        int maxY = min(height - 1, (int)(ball.position.y + ball.radius));
-
-        // Calculate total pixels in bounding box
-        int totalPixels = (maxX - minX + 1) * (maxY - minY + 1);
-
-        // Divide work among threads
-        int pixelsPerThread = (totalPixels + totalThreads - 1) / totalThreads;
-        int startPixel = gid * pixelsPerThread;
-        int endPixel = min(startPixel + pixelsPerThread, totalPixels);
-
-        // Process assigned pixels
-        for (int p = startPixel; p < endPixel; p++) {
-            int x = minX + (p % (maxX - minX + 1));
-            int y = minY + (p / (maxX - minX + 1));
-
-            // Check if pixel is inside ball
-            float dx = x - ball.position.x;
-            float dy = y - ball.position.y;
-            float distSquared = dx * dx + dy * dy;
-
-            if (distSquared <= ball.radius * ball.radius) {
-                int pixelIndex = y * width + x;
-                uchar4 color = (uchar4)(
-                    ((ball.color >> 16) & 0xFF),
-                    ((ball.color >> 8) & 0xFF),
-                    (ball.color & 0xFF),
-                    128  // Semi-transparent
-                );
-                pixelBuffer[pixelIndex] = color;
-            }
-        }
-    }
-}
-
-// Collision detection and resolution kernel
 __kernel void detectCollisions(
     __global Ball* balls,
     __constant SimConstants* constants,
+    __local Ball* localBalls,
     const int numBalls
 ) {
     int gid = get_global_id(0);
-    int numThreads = get_global_size(0);
+    if (gid >= numBalls) return;
 
-    // Calculate work distribution for collision pairs
-    int totalPairs = (numBalls * (numBalls - 1)) / 2;
-    int pairsPerThread = (totalPairs + numThreads - 1) / numThreads;
-    int startPair = gid * pairsPerThread;
-    int endPair = min(startPair + pairsPerThread, totalPairs);
+    Ball myBall = balls[gid];
+    float restitution = constants->restitution;
 
-    // Process assigned collision pairs
-    for (int pair = startPair; pair < endPair; pair++) {
-        // Convert pair index to ball indices
-        int i = 0;
-        int temp = pair;
-        while (temp >= numBalls - 1 - i) {
-            temp -= numBalls - 1 - i;
-            i++;
-        }
-        int j = temp + i + 1;
+    // Check collisions with other balls
+    for (int j = 0; j < numBalls; j++) {
+        if (j == gid) continue;
 
-        // Ensure i and j are within bounds
-        if (i >= numBalls || j >= numBalls) continue;
+        Ball otherBall = balls[j];
+        float2 diff = otherBall.position - myBall.position;
+        float distSq = dot(diff, diff);
+        float minDist = myBall.radius + otherBall.radius;
 
-        Ball ball1 = balls[i];
-        Ball ball2 = balls[j];
-
-        // Check for collision
-        float2 delta = ball2.position - ball1.position;
-        float distSquared = dot(delta, delta);
-        float minDist = ball1.radius + ball2.radius;
-
-        if (distSquared < minDist * minDist) {
-            float distance = sqrt(distSquared);
-            if (distance < 0.0001f) {
-                delta = make_float2(minDist, 0.0f);
-                distance = minDist;
-            }
-
-            // Calculate collision normal
-            float2 normal = delta / distance;
+        if (distSq < minDist * minDist && distSq > 0.0f) {
+            float dist = sqrt(distSq);
+            float2 normal = diff / dist;
 
             // Calculate relative velocity
-            float2 relativeVel = ball2.velocity - ball1.velocity;
+            float2 relativeVel = otherBall.velocity - myBall.velocity;
             float velAlongNormal = dot(relativeVel, normal);
 
             // Only resolve if balls are moving toward each other
             if (velAlongNormal < 0) {
-                // Calculate impulse
-                float impulseMagnitude = -(1.0f + constants->restitution) * velAlongNormal;
-                impulseMagnitude /= (1.0f / ball1.mass + 1.0f / ball2.mass);
+                float j = -(1.0f + restitution) * velAlongNormal;
+                j /= 1.0f/myBall.mass + 1.0f/otherBall.mass;
 
-                // Apply impulse
-                float2 impulse = impulseMagnitude * normal;
-                ball1.velocity -= impulse / ball1.mass;
-                ball2.velocity += impulse / ball2.mass;
-
-                // Position correction (avoid sinking)
-                const float percent = 0.8f;
-                float2 correction = (max(minDist - distance, 0.0f) /
-                                  (1.0f / ball1.mass + 1.0f / ball2.mass)) *
-                                  percent * normal;
-
-                ball1.position -= correction / ball1.mass;
-                ball2.position += correction / ball2.mass;
-
-                // Write back updated balls
-                balls[i] = ball1;
-                balls[j] = ball2;
+                float2 impulse = j * normal;
+                myBall.velocity -= impulse / myBall.mass;
             }
         }
     }
-}
 
+    balls[gid] = myBall;
+}
