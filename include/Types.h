@@ -166,7 +166,7 @@ struct GLInteropObjects {
     GLuint vertexBuffer{0};     // OpenGL vertex buffer
     GLuint textureId{0};        // OpenGL texture
     cl::Buffer vertexBufferCL;  // OpenCL buffer for vertex data
-    cl::Image2D textureCL;      // OpenCL image for texture
+    cl::ImageGL textureCL;      // OpenCL image for GL texture interop
     bool initialized{false};     // Initialization flag
 };
 
