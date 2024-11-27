@@ -95,19 +95,41 @@ void GPUManager::createContext() {
 
         // Create context with GL sharing
         cl_int error = CL_SUCCESS;
-        cl_context_properties props[] = {
-            CL_CONTEXT_PLATFORM, (cl_context_properties)platform(),
-            CL_GLX_DISPLAY_KHR, (cl_context_properties)display,
-            CL_GL_CONTEXT_KHR, (cl_context_properties)glxContext,
-            0
-        };
+        
+        // Get current OpenGL context and display
+        Display* display = glXGetCurrentDisplay();
+        GLXContext glxContext = glXGetCurrentContext();
+        GLXDrawable drawable = glXGetCurrentDrawable();
+        
+        if (!display || !glxContext || !drawable) {
+            throw std::runtime_error("No active OpenGL context/display/drawable found");
+        }
 
+        // Set up context properties
+        std::vector<cl_context_properties> props;
+        props.push_back(CL_CONTEXT_PLATFORM);
+        props.push_back((cl_context_properties)platform());
+        props.push_back(CL_GLX_DISPLAY_KHR);
+        props.push_back((cl_context_properties)display);
+        props.push_back(CL_GL_CONTEXT_KHR);
+        props.push_back((cl_context_properties)glxContext);
+        // Add current drawable for Intel GPUs
+        props.push_back(CL_GLX_DRAWABLE_KHR);
+        props.push_back((cl_context_properties)drawable);
+        props.push_back(0);  // List terminator
+
+        // Create context
         std::vector<cl::Device> devices = {device};
-        context = cl::Context(devices, props, nullptr, nullptr, &error);
+        context = cl::Context(devices, props.data(), nullptr, nullptr, &error);
 
         if (error != CL_SUCCESS) {
             std::stringstream ss;
-            ss << "Failed to create OpenCL context with error: " << error;
+            ss << "Failed to create OpenCL context with error: " << error << "\n"
+               << "Display: " << display << "\n"
+               << "GLX Context: " << glxContext << "\n"
+               << "Drawable: " << drawable << "\n"
+               << "Platform: " << platform.getInfo<CL_PLATFORM_NAME>() << "\n"
+               << "Device: " << device.getInfo<CL_DEVICE_NAME>();
             throw cl::Error(error, ss.str().c_str());
         }
 
