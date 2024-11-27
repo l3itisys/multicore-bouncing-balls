@@ -13,7 +13,7 @@ struct Display {
     static constexpr int DEFAULT_HEIGHT = 900;
     static constexpr double TARGET_FPS = 60.0;
     static constexpr double FRAME_TIME = 1.0 / TARGET_FPS;
-    static constexpr int MSAA_SAMPLES = 4;  // Added MSAA sample count
+    static constexpr int MSAA_SAMPLES = 4;
     static constexpr bool VSYNC_ENABLED = true;
 };
 
@@ -62,3 +62,4 @@ struct Error {
 } // namespace sim
 
 #endif // BOUNCING_BALLS_CONFIG_H
+

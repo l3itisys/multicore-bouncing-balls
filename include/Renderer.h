@@ -11,28 +11,45 @@ public:
     Renderer(int width, int height);
     ~Renderer();
 
-    bool initialize();
-    void cleanup();
-    void render(const std::vector<Ball>& balls);
-    bool shouldClose() const { return glfwWindowShouldClose(window); }
-
-    void resizeFramebuffer(int width, int height);
+    bool initialize(size_t numBalls);
+    void render(const std::vector<Ball>& balls, double fps = 0.0);
+    bool shouldClose() const;
     GLFWwindow* getWindow() const { return window; }
 
 private:
-    void drawCircle(float centerX, float centerY, float radius, uint32_t color);
-    void setupViewport(int width, int height);  // Added this declaration
+    // GLFW Context management
+    class GLFWContext {
+    public:
+        GLFWContext();
+        ~GLFWContext();
+    private:
+        GLFWContext(const GLFWContext&) = delete;
+        GLFWContext& operator=(const GLFWContext&) = delete;
+    };
+
+    static GLFWContext glfw;
+
+    void setupOpenGL();
+    void drawBalls(const std::vector<Ball>& balls);
+    void drawCircle(float x, float y, float radius, uint32_t color, float alpha);
+    void drawText(const std::string& text, float x, float y, float scale);
+    void renderFPS(double fps);
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
-    static void errorCallback(int error, const char* description);
 
     GLFWwindow* window;
     int width;
     int height;
 
+    // Data
+    size_t numBalls;
+
     static constexpr int CIRCLE_SEGMENTS = 32;
+    static constexpr float TEXT_SCALE = 0.15f;
+    static constexpr float PI = 3.14159265358979323846f;
 };
 
 } // namespace sim
 
 #endif // BOUNCING_BALLS_RENDERER_H
+

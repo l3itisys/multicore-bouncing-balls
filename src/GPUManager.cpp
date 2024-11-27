@@ -28,7 +28,7 @@ void GPUManager::initialize(size_t numBalls_, int screenWidth, int screenHeight)
         createContext();
         buildProgram();
         createKernels();
-        createBuffers(numBalls);
+        createBuffers();
 
         workGroupSize = std::min(
             device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>(),
@@ -46,39 +46,29 @@ void GPUManager::initialize(size_t numBalls_, int screenWidth, int screenHeight)
 
 void GPUManager::createContext() {
     try {
+        // Get OpenCL platforms
         std::vector<cl::Platform> platforms;
         cl::Platform::get(&platforms);
         if (platforms.empty()) {
             throw std::runtime_error("No OpenCL platforms found");
         }
 
-        // Find suitable platform and device
+        // Choose the first platform and device
         for (const auto& platform : platforms) {
-            std::string platformName = platform.getInfo<CL_PLATFORM_NAME>();
-            std::cout << "Found platform: " << platformName << std::endl;
+            std::vector<cl::Device> devices;
+            platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
 
-            try {
-                std::vector<cl::Device> devices;
-                platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
-
-                for (const auto& dev : devices) {
-                    device = dev;
-                    std::cout << "Selected device: " << dev.getInfo<CL_DEVICE_NAME>() << std::endl;
-                    break;
-                }
+            if (!devices.empty()) {
+                device = devices.front();
+                context = cl::Context(device);
+                break;
             }
-            catch (const cl::Error& e) {
-                continue;
-            }
-
-            if (device()) break;
         }
 
-        if (!device()) {
-            throw std::runtime_error("No suitable OpenCL device found");
+        if (!context()) {
+            throw std::runtime_error("Failed to create OpenCL context");
         }
 
-        context = cl::Context(device);
         queue = cl::CommandQueue(context, device);
 
         std::cout << "OpenCL context created successfully" << std::endl;
@@ -92,8 +82,10 @@ void GPUManager::createContext() {
 void GPUManager::buildProgram() {
     try {
         std::string source = loadKernelSource();
-        program = cl::Program(context, source);
-        program.build("-cl-std=CL2.0");
+        cl::Program::Sources sources;
+        sources.push_back({source.c_str(), source.length()});
+        program = cl::Program(context, sources);
+        program.build("-cl-std=CL1.2");
     }
     catch (const cl::Error& error) {
         std::cerr << "Build error:" << std::endl;
@@ -122,13 +114,11 @@ void GPUManager::createKernels() {
     collisionKernel = cl::Kernel(program, "detectCollisions");
 }
 
-void GPUManager::createBuffers(size_t numBalls) {
-    size_t ballBufferSize = sizeof(Ball) * numBalls;
-
-    ballBuffer = cl::Buffer(
+void GPUManager::createBuffers() {
+    ballsBuffer = cl::Buffer(
         context,
         CL_MEM_READ_WRITE,
-        ballBufferSize
+        sizeof(Ball) * numBalls
     );
 
     constantsBuffer = cl::Buffer(
@@ -140,20 +130,21 @@ void GPUManager::createBuffers(size_t numBalls) {
 
 void GPUManager::updatePhysics(std::vector<Ball>& balls) {
     try {
-        // Write data to device
-        queue.enqueueWriteBuffer(ballBuffer, CL_FALSE, 0,
-                               sizeof(Ball) * balls.size(), balls.data());
+        // Write balls data to device
+        queue.enqueueWriteBuffer(ballsBuffer, CL_FALSE, 0,
+                                 sizeof(Ball) * numBalls, balls.data());
 
+        // Write constants to device
         queue.enqueueWriteBuffer(constantsBuffer, CL_FALSE, 0,
-                               sizeof(SimConstants), &constants);
+                                 sizeof(SimConstants), &constants);
 
         // Set kernel arguments for physics update
-        physicsKernel.setArg(0, ballBuffer);
+        physicsKernel.setArg(0, ballsBuffer);
         physicsKernel.setArg(1, constantsBuffer);
-        physicsKernel.setArg(2, static_cast<int>(balls.size()));
+        physicsKernel.setArg(2, static_cast<int>(numBalls));
 
         // Calculate work sizes
-        size_t globalSize = ((balls.size() + workGroupSize - 1) / workGroupSize) * workGroupSize;
+        size_t globalSize = ((numBalls + workGroupSize - 1) / workGroupSize) * workGroupSize;
 
         // Run physics kernel
         queue.enqueueNDRangeKernel(
@@ -164,10 +155,9 @@ void GPUManager::updatePhysics(std::vector<Ball>& balls) {
         );
 
         // Set kernel arguments for collision detection
-        collisionKernel.setArg(0, ballBuffer);
+        collisionKernel.setArg(0, ballsBuffer);
         collisionKernel.setArg(1, constantsBuffer);
-        collisionKernel.setArg(2, cl::Local(sizeof(Ball) * workGroupSize));
-        collisionKernel.setArg(3, static_cast<int>(balls.size()));
+        collisionKernel.setArg(2, static_cast<int>(numBalls));
 
         // Run collision kernel
         queue.enqueueNDRangeKernel(
@@ -177,9 +167,9 @@ void GPUManager::updatePhysics(std::vector<Ball>& balls) {
             cl::NDRange(workGroupSize)
         );
 
-        // Read back results
-        queue.enqueueReadBuffer(ballBuffer, CL_TRUE, 0,
-                              sizeof(Ball) * balls.size(), balls.data());
+        // Read updated balls data back to host
+        queue.enqueueReadBuffer(ballsBuffer, CL_TRUE, 0,
+                                sizeof(Ball) * numBalls, balls.data());
 
         queue.finish();
 
@@ -191,3 +181,4 @@ void GPUManager::updatePhysics(std::vector<Ball>& balls) {
 }
 
 } // namespace sim
+

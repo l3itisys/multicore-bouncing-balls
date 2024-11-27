@@ -42,3 +42,4 @@ struct alignas(32) SimConstants {
 } // namespace sim
 
 #endif // BOUNCING_BALLS_TYPES_H
+

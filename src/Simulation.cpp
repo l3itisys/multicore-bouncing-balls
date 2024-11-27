@@ -13,7 +13,7 @@ Simulation::Simulation(int numBalls, float screenWidth_, float screenHeight_)
     std::cout << "Creating simulation with " << numBalls << " balls" << std::endl;
 
     // Initialize renderer first
-    if (!renderer.initialize()) {
+    if (!renderer.initialize(numBalls)) {
         throw std::runtime_error("Failed to initialize renderer");
     }
 
@@ -35,13 +35,13 @@ Simulation::Simulation(int numBalls, float screenWidth_, float screenHeight_)
               << "  restitution: " << constants.restitution << std::endl
               << "  screen: " << screenWidth << "x" << screenHeight << std::endl;
 
-    // Initialize balls
-    initializeBalls(numBalls);
-
     // Initialize GPU manager
-    gpuManager.initialize(balls.size(), static_cast<int>(screenWidth),
+    gpuManager.initialize(numBalls, static_cast<int>(screenWidth),
                          static_cast<int>(screenHeight));
     gpuManager.setConstants(constants);
+
+    // Initialize balls
+    initializeBalls(numBalls);
 }
 
 Simulation::~Simulation() {
@@ -49,64 +49,22 @@ Simulation::~Simulation() {
 }
 
 void Simulation::initializeBalls(int numBalls) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<float> distX(0.0f, screenWidth);
+    std::uniform_real_distribution<float> distY(0.0f, screenHeight);
+    std::uniform_real_distribution<float> distVel(-config::Balls::VELOCITY_RANGE, config::Balls::VELOCITY_RANGE);
+    std::uniform_real_distribution<float> distRadius(config::Balls::MIN_RADIUS, config::Balls::MAX_RADIUS);
+    std::uniform_int_distribution<size_t> distColor(0, config::Balls::COLOR_COUNT - 1);
 
-    std::uniform_real_distribution<float> radiusDist(
-        config::Balls::MIN_RADIUS,
-        config::Balls::MAX_RADIUS
-    );
-
-    std::uniform_real_distribution<float> velDist(
-        -config::Balls::VELOCITY_RANGE,
-        config::Balls::VELOCITY_RANGE
-    );
-
-    balls.reserve(numBalls);
-
-    // Calculate grid for initial placement
-    int gridCols = static_cast<int>(std::sqrt(numBalls * screenWidth / screenHeight));
-    int gridRows = (numBalls + gridCols - 1) / gridCols;
-    float cellWidth = screenWidth / gridCols;
-    float cellHeight = screenHeight / gridRows;
-
-    for (int i = 0; i < numBalls; i++) {
-        int row = i / gridCols;
-        int col = i % gridCols;
-
-        Ball ball;
-        ball.radius = radiusDist(gen);
-        ball.mass = ball.radius * ball.radius;
-        ball.color = config::Balls::COLORS[i % config::Balls::COLOR_COUNT];
-
-        // Ensure balls are placed within screen boundaries
-        float margin = ball.radius * 2.0f;
-
-        // Calculate position within grid cell
-        float minX = col * cellWidth + margin;
-        float maxX = (col + 1) * cellWidth - margin;
-        float minY = row * cellHeight + margin;
-        float maxY = (row + 1) * cellHeight - margin;
-
-        // Ensure valid position ranges
-        minX = std::max(minX, ball.radius);
-        maxX = std::min(maxX, screenWidth - ball.radius);
-        minY = std::max(minY, ball.radius);
-        maxY = std::min(maxY, screenHeight - ball.radius);
-
-        // Generate random position within valid range
-        std::uniform_real_distribution<float> xDist(minX, maxX);
-        std::uniform_real_distribution<float> yDist(minY, maxY);
-
-        ball.position.x = xDist(gen);
-        ball.position.y = yDist(gen);
-        ball.velocity.x = velDist(gen);
-        ball.velocity.y = velDist(gen);
-
-        balls.push_back(ball);
+    balls.resize(numBalls);
+    for (auto& ball : balls) {
+        ball.position = Vec2(distX(rng), distY(rng));
+        ball.velocity = Vec2(distVel(rng), distVel(rng));
+        ball.radius = distRadius(rng);
+        ball.mass = ball.radius * ball.radius; // Mass proportional to area
+        ball.color = config::Balls::COLORS[distColor(rng)];
+        ball.padding = 0;
     }
-
-    std::cout << "Initialized " << balls.size() << " balls" << std::endl;
 }
 
 void Simulation::start() {
@@ -132,10 +90,7 @@ void Simulation::physicsLoop() {
 
     while (running && !shouldClose()) {
         if (!paused) {
-            {
-                std::lock_guard<std::mutex> lock(ballsMutex);
-                gpuManager.updatePhysics(balls);
-            }
+            gpuManager.updatePhysics(balls);
         }
 
         nextUpdate += updateInterval;
@@ -145,27 +100,38 @@ void Simulation::physicsLoop() {
 
 void Simulation::renderLoop() {
     using clock = std::chrono::steady_clock;
+    auto lastTime = clock::now();
     auto nextFrame = clock::now();
     const auto frameInterval = std::chrono::duration_cast<clock::duration>(
         std::chrono::duration<double>(DISPLAY_DT)
     );
 
-    std::cout << "Render loop starting with " << balls.size() << " balls" << std::endl;
+    int frameCount = 0;
+    double fpsTimer = 0.0;
+    double currentFPS = 0.0;
+
+    std::cout << "Render loop starting" << std::endl;
 
     while (running && !shouldClose()) {
-        // Always process events
-        glfwPollEvents();
+        auto currentTime = clock::now();
+        double deltaTime = std::chrono::duration<double>(currentTime - lastTime).count();
+        lastTime = currentTime;
 
-        if (!paused) {
-            std::vector<Ball> currentBalls;
-            {
-                std::lock_guard<std::mutex> lock(ballsMutex);
-                currentBalls = balls;
-            }
-
-            renderer.render(currentBalls);
+        // Update FPS counter
+        frameCount++;
+        fpsTimer += deltaTime;
+        if (fpsTimer >= 1.0) {
+            currentFPS = frameCount / fpsTimer;
+            frameCount = 0;
+            fpsTimer = 0.0;
         }
 
+        // Render current state
+        if (!paused) {
+            renderer.render(balls, currentFPS);
+        }
+
+        // Wait for next frame
         nextFrame += frameInterval;
         std::this_thread::sleep_until(nextFrame);
     }
@@ -191,3 +157,4 @@ void Simulation::keyCallback(GLFWwindow* window, int key, int /*scancode*/, int 
 }
 
 } // namespace sim
+

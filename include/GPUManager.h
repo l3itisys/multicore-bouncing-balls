@@ -24,7 +24,7 @@ private:
     void createContext();
     void buildProgram();
     void createKernels();
-    void createBuffers(size_t numBalls);
+    void createBuffers();
     std::string loadKernelSource();
 
     // OpenCL objects
@@ -38,7 +38,7 @@ private:
     cl::Kernel collisionKernel;
 
     // Buffers
-    cl::Buffer ballBuffer;
+    cl::Buffer ballsBuffer;
     cl::Buffer constantsBuffer;
 
     // State
@@ -56,3 +56,4 @@ private:
 } // namespace sim
 
 #endif // BOUNCING_BALLS_GPU_MANAGER_H
+

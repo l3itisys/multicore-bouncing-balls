@@ -16,12 +16,18 @@ void setupSignalHandling() {
     std::signal(SIGTERM, signalHandler);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     try {
         setupSignalHandling();
 
+        int numBalls = sim::config::Balls::DEFAULT_COUNT;
+        if (argc > 1) {
+            numBalls = std::stoi(argv[1]);
+            numBalls = std::clamp(numBalls, sim::config::Balls::MIN_COUNT, sim::config::Balls::MAX_COUNT);
+        }
+
         sim::Simulation simulation(
-            sim::config::Balls::DEFAULT_COUNT,
+            numBalls,
             sim::config::Display::DEFAULT_WIDTH,
             sim::config::Display::DEFAULT_HEIGHT
         );
@@ -45,3 +51,4 @@ int main() {
         return 1;
     }
 }
+

@@ -3,8 +3,8 @@ typedef struct {
     float2 velocity;
     float radius;
     float mass;
-    int color;
-    int padding;
+    uint color;
+    uint padding;
 } Ball;
 
 typedef struct {
@@ -63,7 +63,6 @@ __kernel void updateBallPhysics(
 __kernel void detectCollisions(
     __global Ball* balls,
     __constant SimConstants* constants,
-    __local Ball* localBalls,
     const int numBalls
 ) {
     int gid = get_global_id(0);
@@ -102,3 +101,4 @@ __kernel void detectCollisions(
 
     balls[gid] = myBall;
 }
+

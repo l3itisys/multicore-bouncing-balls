@@ -1,181 +1,184 @@
 #include "Renderer.h"
 #include "Config.h"
-#include <iostream>
+#include <stdexcept>
 #include <cmath>
+#include <sstream>
+#include <iomanip>
+#include <iostream>
 #include <algorithm>
 
 namespace sim {
 
-Renderer::Renderer(int width_, int height_)
-    : width(width_)
-    , height(height_)
-    , window(nullptr)
-{
-}
+Renderer::GLFWContext Renderer::glfw;
 
-Renderer::~Renderer() {
-    cleanup();
-}
-
-void Renderer::cleanup() {
-    if (window) {
-        glfwDestroyWindow(window);
-        window = nullptr;
+// GLFW Context management
+Renderer::GLFWContext::GLFWContext() {
+    if (!glfwInit()) {
+        throw std::runtime_error("Failed to initialize GLFW");
     }
+    std::cout << "GLFW initialized successfully\n";
+}
+
+Renderer::GLFWContext::~GLFWContext() {
     glfwTerminate();
 }
 
-bool Renderer::initialize() {
-    // Initialize GLFW
-    if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
-        return false;
+Renderer::Renderer(int width_, int height_)
+    : width(width_), height(height_), window(nullptr), numBalls(0) {
+}
+
+Renderer::~Renderer() {
+    if (window) {
+        glfwDestroyWindow(window);
     }
+}
 
-    glfwSetErrorCallback(errorCallback);
+bool Renderer::initialize(size_t numBalls_) {
+    numBalls = numBalls_;
 
-    // Basic window hints
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    glfwWindowHint(GLFW_SAMPLES, 4); // Enable antialiasing
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_SAMPLES, 4);
 
-    // Create window
-    window = glfwCreateWindow(width, height, "Bouncing Balls", nullptr, nullptr);
+    window = glfwCreateWindow(
+        width, height,
+        "Bouncing Balls Simulation (OpenCL)",
+        nullptr, nullptr
+    );
+
     if (!window) {
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return false;
+        throw std::runtime_error("Failed to create GLFW window");
     }
 
     glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
     // Initialize GLEW
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) {
-        std::cerr << "Failed to initialize GLEW" << std::endl;
-        return false;
+        throw std::runtime_error("Failed to initialize GLEW");
     }
 
-    // Clear any error flags
-    while (glGetError() != GL_NO_ERROR);
+    setupOpenGL();
 
-    // Print OpenGL info
-    std::cout << "\nOpenGL Context Info:" << std::endl;
-    std::cout << "Version: " << glGetString(GL_VERSION) << std::endl;
-    std::cout << "Vendor: " << glGetString(GL_VENDOR) << std::endl;
-    std::cout << "Renderer: " << glGetString(GL_RENDERER) << std::endl;
+    // Enable VSync
+    glfwSwapInterval(1);
 
-    // Set up viewport and projection
-    setupViewport(width, height);
-
-    // Set callbacks
-    glfwSetWindowUserPointer(window, this);
-    glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
-
-    // Configure OpenGL
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // Set background color
-    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+    std::cout << "OpenGL Renderer initialized:\n"
+              << "  Version: " << glGetString(GL_VERSION) << "\n"
+              << "  Vendor: " << glGetString(GL_VENDOR) << "\n"
+              << "  Renderer: " << glGetString(GL_RENDERER) << "\n\n";
 
     return true;
 }
 
-void Renderer::setupViewport(int width_, int height_) {
-    // Update viewport size
-    glViewport(0, 0, width_, height_);
+void Renderer::setupOpenGL() {
+    // Enable alpha blending
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Set up orthographic projection
+    // Enable antialiasing
+    glEnable(GL_MULTISAMPLE);
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+
+    // Set up viewport and projection
+    glViewport(0, 0, width, height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0.0, (double)width_, (double)height_, 0.0, -1.0, 1.0);
-
-    // Reset modelview matrix
+    glOrtho(0, width, height, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
 
-    // Store dimensions
-    width = width_;
-    height = height_;
-
-    // Verify viewport
-    GLint viewport[4];
-    glGetIntegerv(GL_VIEWPORT, viewport);
-    std::cout << "Viewport set to: " << viewport[2] << "x" << viewport[3] << std::endl;
+    // Set background color (dark gray for better visibility)
+    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
 }
 
-void Renderer::render(const std::vector<Ball>& balls) {
+void Renderer::render(const std::vector<Ball>& balls, double fps) {
     // Clear the screen
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadIdentity();
 
-    // Draw solid color background
-    glColor3f(0.2f, 0.2f, 0.2f);
-    glBegin(GL_QUADS);
-    glVertex2f(0.0f, 0.0f);
-    glVertex2f((float)width, 0.0f);
-    glVertex2f((float)width, (float)height);
-    glVertex2f(0.0f, (float)height);
-    glEnd();
-
     // Draw balls
-    for (const auto& ball : balls) {
-        drawCircle(ball.position.x, ball.position.y, ball.radius, ball.color);
-    }
+    drawBalls(balls);
 
-    // Swap buffers
+    // Draw FPS counter
+    renderFPS(fps);
+
+    // Swap buffers and poll events
     glfwSwapBuffers(window);
     glfwPollEvents();
 }
 
-void Renderer::drawCircle(float centerX, float centerY, float radius, uint32_t color) {
-    // Extract color components
-    float r = ((color >> 16) & 0xFF) / 255.0f;
-    float g = ((color >> 8) & 0xFF) / 255.0f;
-    float b = (color & 0xFF) / 255.0f;
+void Renderer::drawBalls(const std::vector<Ball>& balls) {
+    // Draw each ball
+    for (const auto& ball : balls) {
+        drawCircle(ball.position.x, ball.position.y, ball.radius, ball.color, 0.7f);
+    }
+}
 
-    // Set color
-    glColor3f(r, g, b);
+void Renderer::drawCircle(float x, float y, float radius, uint32_t color, float alpha) {
+    float r = ((color >> 24) & 0xFF) / 255.0f;
+    float g = ((color >> 16) & 0xFF) / 255.0f;
+    float b = ((color >> 8) & 0xFF) / 255.0f;
 
-    // Draw filled circle
+    glColor4f(r, g, b, alpha);
     glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(centerX, centerY);  // Center point
 
-    for (int i = 0; i <= CIRCLE_SEGMENTS; i++) {
-        float angle = i * 2.0f * M_PI / CIRCLE_SEGMENTS;
-        float x = centerX + radius * cosf(angle);
-        float y = centerY + radius * sinf(angle);
-        glVertex2f(x, y);
-    }
-    glEnd();
+    // Center point
+    glVertex2f(x, y);
 
-    // Draw outline
-    glColor3f(r * 0.7f, g * 0.7f, b * 0.7f);
-    glBegin(GL_LINE_LOOP);
-    for (int i = 0; i < CIRCLE_SEGMENTS; i++) {
-        float angle = i * 2.0f * M_PI / CIRCLE_SEGMENTS;
-        float x = centerX + radius * cosf(angle);
-        float y = centerY + radius * sinf(angle);
-        glVertex2f(x, y);
+    // Circle vertices
+    for (int i = 0; i <= CIRCLE_SEGMENTS; ++i) {
+        float angle = i * 2.0f * PI / CIRCLE_SEGMENTS;
+        float px = x + radius * std::cos(angle);
+        float py = y + radius * std::sin(angle);
+        glVertex2f(px, py);
     }
+
     glEnd();
 }
 
-void Renderer::resizeFramebuffer(int width_, int height_) {
-    setupViewport(width_, height_);
+void Renderer::renderFPS(double fps) {
+    std::stringstream ss;
+    ss << "FPS: " << std::fixed << std::setprecision(1) << fps;
+
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f); // White text
+    drawText(ss.str(), 10.0f, 20.0f, TEXT_SCALE);
+}
+
+void Renderer::drawText(const std::string& text, float x, float y, float scale) {
+    // Simple bitmap text rendering using immediate mode
+    // For better text rendering, consider using a library like FreeType
+    glPushMatrix();
+    glTranslatef(x, y, 0.0f);
+    glScalef(scale, scale, 1.0f);
+
+    for (char c : text) {
+        // Simple character rendering (placeholder)
+        // Replace with actual text rendering logic as needed
+        // Here, we'll just draw points as placeholders
+        glBegin(GL_POINTS);
+        glVertex2f(0, 0);
+        glEnd();
+        glTranslatef(10.0f, 0.0f, 0.0f); // Move to next character position
+    }
+
+    glPopMatrix();
 }
 
 void Renderer::framebufferSizeCallback(GLFWwindow* window, int width, int height) {
-    auto* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
-    if (renderer) {
-        renderer->resizeFramebuffer(width, height);
-    }
+    if (width == 0 || height == 0) return; // Avoid division by zero
+    glViewport(0, 0, width, height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, width, height, 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
 }
 
-void Renderer::errorCallback(int error, const char* description) {
-    std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
+bool Renderer::shouldClose() const {
+    return glfwWindowShouldClose(window);
 }
 
 } // namespace sim
+

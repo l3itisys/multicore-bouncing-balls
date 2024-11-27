@@ -31,7 +31,6 @@ private:
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
     // Core components
-    std::vector<Ball> balls;
     SimConstants constants;
     GPUManager gpuManager;
     Renderer renderer;
@@ -41,11 +40,13 @@ private:
     std::atomic<bool> paused{false};
     std::thread physicsThread;
     std::thread renderThread;
-    mutable std::mutex ballsMutex;
 
     // Scene dimensions
     float screenWidth;
     float screenHeight;
+
+    // Balls data
+    std::vector<Ball> balls;
 
     // Constants
     static constexpr float PHYSICS_RATE = config::Physics::RATE;
@@ -57,3 +58,4 @@ private:
 } // namespace sim
 
 #endif // BOUNCING_BALLS_SIMULATION_H
+
