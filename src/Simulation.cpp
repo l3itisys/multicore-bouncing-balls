@@ -99,6 +99,19 @@ void Simulation::physicsLoop() {
 }
 
 void Simulation::renderLoop() {
+    // Make the OpenGL context current in this thread
+    glfwMakeContextCurrent(renderer.getWindow());
+
+    // Initialize GLEW (must be done after making the context current)
+    glewExperimental = GL_TRUE;
+    GLenum err = glewInit();
+    if (GLEW_OK != err) {
+        throw std::runtime_error("Failed to initialize GLEW in render thread");
+    }
+
+    // Set up OpenGL (now that context is current in this thread)
+    renderer.setupOpenGL();
+
     using clock = std::chrono::steady_clock;
     auto lastTime = clock::now();
     auto nextFrame = clock::now();
@@ -135,6 +148,9 @@ void Simulation::renderLoop() {
         nextFrame += frameInterval;
         std::this_thread::sleep_until(nextFrame);
     }
+
+    // Clean up: Make context not current
+    glfwMakeContextCurrent(nullptr);
 }
 
 void Simulation::keyCallback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/) {

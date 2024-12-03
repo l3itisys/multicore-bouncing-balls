@@ -10,6 +10,8 @@ find_package(OpenGL REQUIRED)
 find_package(OpenCL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
+# Remove or comment out the GLUT find_package
+# find_package(GLUT REQUIRED)
 
 # Add executable
 add_executable(bouncing_balls
@@ -25,6 +27,8 @@ target_include_directories(bouncing_balls
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${OpenCL_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIRS}
+        # Remove or comment out GLUT include dirs
+        # ${GLUT_INCLUDE_DIRS}
 )
 
 # Link libraries
@@ -34,6 +38,8 @@ target_link_libraries(bouncing_balls
         OpenCL::OpenCL
         GLEW::GLEW
         glfw
+        # Remove or comment out GLUT libraries
+        # ${GLUT_LIBRARIES}
 )
 
 # Copy OpenCL kernel to build directory

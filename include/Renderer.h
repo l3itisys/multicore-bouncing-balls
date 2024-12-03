@@ -3,6 +3,7 @@
 
 #include "Types.h"
 #include <vector>
+#include <string>
 
 namespace sim {
 
@@ -15,6 +16,8 @@ public:
     void render(const std::vector<Ball>& balls, double fps = 0.0);
     bool shouldClose() const;
     GLFWwindow* getWindow() const { return window; }
+
+    void setupOpenGL(); // Made public
 
 private:
     // GLFW Context management
@@ -29,11 +32,10 @@ private:
 
     static GLFWContext glfw;
 
-    void setupOpenGL();
     void drawBalls(const std::vector<Ball>& balls);
     void drawCircle(float x, float y, float radius, uint32_t color, float alpha);
-    void drawText(const std::string& text, float x, float y, float scale);
-    void renderFPS(double fps);
+    void drawText(const std::string& text, float x, float y, float scale); // Added back
+    void renderFPS(double fps); // Added back
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 

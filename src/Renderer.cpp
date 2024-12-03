@@ -7,6 +7,9 @@
 #include <iostream>
 #include <algorithm>
 
+// Removed GLUT include
+// #include <GL/glut.h>
+
 namespace sim {
 
 Renderer::GLFWContext Renderer::glfw;
@@ -51,29 +54,27 @@ bool Renderer::initialize(size_t numBalls_) {
         throw std::runtime_error("Failed to create GLFW window");
     }
 
-    glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+    // Do not make the context current here
+    // Context will be made current in the render thread
 
-    // Initialize GLEW
-    glewExperimental = GL_TRUE;
-    if (glewInit() != GLEW_OK) {
-        throw std::runtime_error("Failed to initialize GLEW");
-    }
-
-    setupOpenGL();
-
-    // Enable VSync
-    glfwSwapInterval(1);
-
-    std::cout << "OpenGL Renderer initialized:\n"
-              << "  Version: " << glGetString(GL_VERSION) << "\n"
-              << "  Vendor: " << glGetString(GL_VENDOR) << "\n"
-              << "  Renderer: " << glGetString(GL_RENDERER) << "\n\n";
+    std::cout << "OpenGL Renderer initialized\n";
 
     return true;
 }
 
 void Renderer::setupOpenGL() {
+    // Make sure the context is current
+    if (!window || glfwGetCurrentContext() != window) {
+        throw std::runtime_error("OpenGL context is not current in setupOpenGL");
+    }
+
+    // Initialize GLEW
+    glewExperimental = GL_TRUE;
+    GLenum err = glewInit();
+    if (GLEW_OK != err) {
+        throw std::runtime_error("Failed to initialize GLEW");
+    }
+
     // Enable alpha blending
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -92,6 +93,17 @@ void Renderer::setupOpenGL() {
 
     // Set background color (dark gray for better visibility)
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+
+    // Set swap interval (VSync)
+    glfwSwapInterval(sim::config::Display::VSYNC_ENABLED ? 1 : 0);
+
+    // Set framebuffer size callback
+    glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+
+    std::cout << "OpenGL setup completed:\n"
+              << "  Version: " << glGetString(GL_VERSION) << "\n"
+              << "  Vendor: " << glGetString(GL_VENDOR) << "\n"
+              << "  Renderer: " << glGetString(GL_RENDERER) << "\n\n";
 }
 
 void Renderer::render(const std::vector<Ball>& balls, double fps) {
@@ -102,8 +114,8 @@ void Renderer::render(const std::vector<Ball>& balls, double fps) {
     // Draw balls
     drawBalls(balls);
 
-    // Draw FPS counter
-    renderFPS(fps);
+    // Optionally draw FPS counter
+    // renderFPS(fps);
 
     // Swap buffers and poll events
     glfwSwapBuffers(window);
@@ -118,11 +130,13 @@ void Renderer::drawBalls(const std::vector<Ball>& balls) {
 }
 
 void Renderer::drawCircle(float x, float y, float radius, uint32_t color, float alpha) {
-    float r = ((color >> 24) & 0xFF) / 255.0f;
-    float g = ((color >> 16) & 0xFF) / 255.0f;
-    float b = ((color >> 8) & 0xFF) / 255.0f;
+    // Corrected color extraction (assuming ARGB format)
+    float a = ((color >> 24) & 0xFF) / 255.0f * alpha;
+    float r = ((color >> 16) & 0xFF) / 255.0f;
+    float g = ((color >> 8) & 0xFF) / 255.0f;
+    float b = (color & 0xFF) / 255.0f;
 
-    glColor4f(r, g, b, alpha);
+    glColor4f(r, g, b, a);
     glBegin(GL_TRIANGLE_FAN);
 
     // Center point
@@ -140,31 +154,13 @@ void Renderer::drawCircle(float x, float y, float radius, uint32_t color, float 
 }
 
 void Renderer::renderFPS(double fps) {
-    std::stringstream ss;
-    ss << "FPS: " << std::fixed << std::setprecision(1) << fps;
-
-    glColor4f(1.0f, 1.0f, 1.0f, 1.0f); // White text
-    drawText(ss.str(), 10.0f, 20.0f, TEXT_SCALE);
+    // FPS rendering is disabled (no GLUT)
+    // You can implement text rendering using another method if needed
 }
 
 void Renderer::drawText(const std::string& text, float x, float y, float scale) {
-    // Simple bitmap text rendering using immediate mode
-    // For better text rendering, consider using a library like FreeType
-    glPushMatrix();
-    glTranslatef(x, y, 0.0f);
-    glScalef(scale, scale, 1.0f);
-
-    for (char c : text) {
-        // Simple character rendering (placeholder)
-        // Replace with actual text rendering logic as needed
-        // Here, we'll just draw points as placeholders
-        glBegin(GL_POINTS);
-        glVertex2f(0, 0);
-        glEnd();
-        glTranslatef(10.0f, 0.0f, 0.0f); // Move to next character position
-    }
-
-    glPopMatrix();
+    // Text rendering is disabled (no GLUT)
+    // You can implement text rendering using another method if needed
 }
 
 void Renderer::framebufferSizeCallback(GLFWwindow* window, int width, int height) {
