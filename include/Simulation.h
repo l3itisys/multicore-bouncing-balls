@@ -2,32 +2,33 @@
 #define SIMULATION_H
 
 #include "Ball.h"
+#include "Grid.h"
 #include <vector>
 #include <memory>
-#include <mutex>
+#include <thread>
+#include <atomic>
+#include <tbb/concurrent_vector.h>
 
 class Simulation {
 public:
     Simulation(int numBalls, float screenWidth, float screenHeight);
     ~Simulation();
 
+    void start();
+    void stop();
     void update(float dt);
-    const std::vector<std::unique_ptr<Ball>>& getBalls() const;
+    const tbb::concurrent_vector<Ball*>& getBalls() const;
 
 private:
-    void assignBallsToGrid();
-    void checkCollisionsInCell(int cellX, int cellY);
-    void handleCollisionBetween(Ball& ballA, Ball& ballB);
+    void simulationLoop();
 
     float screenWidth_, screenHeight_;
-    std::vector<std::unique_ptr<Ball>> balls_;
-
-    // Grid parameters for spatial partitioning
-    float cellSize_;
-    int gridWidth_;
-    int gridHeight_;
-    std::vector<std::vector<std::vector<Ball*>>> grid_; // 2D grid of cells containing pointers to balls
-    std::vector<std::vector<std::unique_ptr<std::mutex>>> cellMutexes_;  // Mutexes for each cell
+    Grid grid_;
+    std::vector<std::unique_ptr<Ball>> ballsStorage_; // Unique ownership
+    tbb::concurrent_vector<Ball*> balls_;             // Thread-safe access
+    std::thread simulationThread_;
+    std::atomic<bool> running_;
+    float dt_;
 };
 
 #endif // SIMULATION_H

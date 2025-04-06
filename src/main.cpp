@@ -3,38 +3,63 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <tbb/parallel_for.h>
 
-int main() {
-    const int numBalls = 10;
-    const float screenWidth = 1400.0f;
-    const float screenHeight = 900.0f;
+int main(int argc, char* argv[]) {
+    const int screenWidth = 1400;
+    const int screenHeight = 900;
 
-    Simulation simulation(numBalls, screenWidth, screenHeight);
-    Renderer renderer(static_cast<int>(screenWidth), static_cast<int>(screenHeight));
-
-    if (!renderer.initialize()) {
-        std::cerr << "Failed to initialize renderer" << std::endl;
-        return -1;
+    // Get number of balls from command line
+    int numBalls = 5;
+    if (argc > 1) {
+        try {
+            numBalls = std::clamp(std::stoi(argv[1]), 3, 10);
+        } catch (const std::exception& e) {
+            std::cerr << "Invalid input. Using default 5 balls.\n";
+        }
     }
 
-    // Simulation loop variables
-    auto previousTime = std::chrono::high_resolution_clock::now();
-    const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
+    try {
+        // Initialize simulation and renderer
+        Simulation simulation(numBalls, static_cast<float>(screenWidth),
+                              static_cast<float>(screenHeight));
+        Renderer renderer(screenWidth, screenHeight);
 
-    while (!renderer.shouldClose()) {
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float dt = std::chrono::duration<float>(currentTime - previousTime).count();
-        previousTime = currentTime;
-
-        simulation.update(dt);      // Control thread for the update
-        renderer.render(simulation); // Control thread handles rendering
-
-        // Sleep to maintain target frame rate
-        auto frameDuration = std::chrono::high_resolution_clock::now() - currentTime;
-        auto sleepTime = std::chrono::duration<float>(targetFrameTime - frameDuration.count());
-        if (sleepTime.count() > 0) {
-            std::this_thread::sleep_for(sleepTime);
+        if (!renderer.initialize()) {
+            std::cerr << "Failed to initialize renderer\n";
+            return -1;
         }
+
+        // Start simulation thread
+        simulation.start();
+
+        // Main loop
+        const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
+
+        while (!renderer.shouldClose()) {
+            auto frameStart = std::chrono::high_resolution_clock::now();
+
+            // Get ball data for rendering
+            const tbb::concurrent_vector<Ball*>& balls = simulation.getBalls();
+
+            // Render
+            renderer.render(balls);
+
+            // Control frame rate
+            auto frameEnd = std::chrono::high_resolution_clock::now();
+            float frameTime = std::chrono::duration<float>(frameEnd - frameStart).count();
+            if (frameTime < targetFrameTime) {
+                std::this_thread::sleep_for(std::chrono::duration<float>(
+                    targetFrameTime - frameTime));
+            }
+        }
+
+        // Stop simulation
+        simulation.stop();
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return -1;
     }
 
     return 0;

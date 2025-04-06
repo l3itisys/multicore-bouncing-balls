@@ -3,35 +3,43 @@
 
 #include <mutex>
 
+class Grid;
+
 class Ball {
 public:
-    Ball(int id, float radius, float mass, float x, float y, float vx, float vy, int color);
+    Ball(int id, float radius, float mass, float x, float y, float vx, float vy,
+         int color, Grid& grid, float screenWidth, float screenHeight);
+    ~Ball() = default;
+    Ball(const Ball&) = delete;
+    Ball& operator=(const Ball&) = delete;
 
     void updatePosition(float dt);
     void applyGravity(float dt);
+    void checkBoundaryCollision();
+    void detectCollisions();
     void handleCollision(Ball& other);
-    void checkBoundaryCollision(float screenWidth, float screenHeight);
 
-    float getX() const;
-    float getY() const;
+    void getPosition(float& x, float& y) const;
     float getVx() const;
     float getVy() const;
-    float getRadius() const;
-    float getMass() const;
-    int getColor() const;
-    int getId() const;
-    std::mutex& getMutex();
+    float getRadius() const { return radius_; }
+    float getMass() const { return mass_; }
+    int getColor() const { return color_; }
+    int getId() const { return id_; }
 
 private:
-    int id_;
-    float radius_;
-    float mass_;
+    const int id_;
+    const float radius_;
+    const float mass_;
     float x_, y_;
     float vx_, vy_;
-    int color_;
-    std::mutex mutex_;
+    const int color_;
+    mutable std::mutex mtx_;
+    Grid& grid_;
+    const float screenWidth_;
+    const float screenHeight_;
 
-    static constexpr float RESTITUTION = 0.8f; // Coefficient of restitution
+    static constexpr float RESTITUTION = 1.0f;
 };
 
 #endif // BALL_H
