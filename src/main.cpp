@@ -1,67 +1,54 @@
 #include "Simulation.h"
-#include "Renderer.h"
 #include <iostream>
-#include <chrono>
-#include <thread>
-#include <tbb/parallel_for.h>
+#include <stdexcept>
+#include <csignal>
+
+namespace {
+    volatile std::sig_atomic_t g_running = 1;
+}
+
+void signalHandler(int /*signum*/) {
+    g_running = 0;
+}
+
+void setupSignalHandling() {
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
+}
 
 int main(int argc, char* argv[]) {
-    const int screenWidth = 1400;
-    const int screenHeight = 900;
-
-    // Get number of balls from command line
-    int numBalls = 5;
-    if (argc > 1) {
-        try {
-            numBalls = std::clamp(std::stoi(argv[1]), 3, 10);
-        } catch (const std::exception& e) {
-            std::cerr << "Invalid input. Using default 5 balls.\n";
-        }
-    }
-
     try {
-        // Initialize simulation and renderer
-        Simulation simulation(numBalls, static_cast<float>(screenWidth),
-                              static_cast<float>(screenHeight));
-        Renderer renderer(screenWidth, screenHeight);
+        setupSignalHandling();
 
-        if (!renderer.initialize()) {
-            std::cerr << "Failed to initialize renderer\n";
-            return -1;
+        int numBalls = sim::config::Balls::DEFAULT_COUNT;
+        if (argc > 1) {
+            numBalls = std::stoi(argv[1]);
+            numBalls = std::clamp(numBalls, sim::config::Balls::MIN_COUNT, sim::config::Balls::MAX_COUNT);
         }
 
-        // Start simulation thread
+        sim::Simulation simulation(
+            numBalls,
+            sim::config::Display::DEFAULT_WIDTH,
+            sim::config::Display::DEFAULT_HEIGHT
+        );
+
+        std::cout << "\nBouncing Balls Simulation\n"
+                  << "Controls:\n"
+                  << "  ESC - Exit\n"
+                  << "  P   - Pause/Resume\n\n";
+
         simulation.start();
 
-        // Main loop
-        const float targetFrameTime = 1.0f / 30.0f; // 30 FPS
-
-        while (!renderer.shouldClose()) {
-            auto frameStart = std::chrono::high_resolution_clock::now();
-
-            // Get ball data for rendering
-            const tbb::concurrent_vector<Ball*>& balls = simulation.getBalls();
-
-            // Render
-            renderer.render(balls);
-
-            // Control frame rate
-            auto frameEnd = std::chrono::high_resolution_clock::now();
-            float frameTime = std::chrono::duration<float>(frameEnd - frameStart).count();
-            if (frameTime < targetFrameTime) {
-                std::this_thread::sleep_for(std::chrono::duration<float>(
-                    targetFrameTime - frameTime));
-            }
+        while (g_running && !simulation.shouldClose()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        // Stop simulation
         simulation.stop();
-
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return -1;
+        return 0;
     }
-
-    return 0;
+    catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
 }
 

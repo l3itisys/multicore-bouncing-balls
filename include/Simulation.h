@@ -1,13 +1,16 @@
-#ifndef SIMULATION_H
-#define SIMULATION_H
+#ifndef BOUNCING_BALLS_SIMULATION_H
+#define BOUNCING_BALLS_SIMULATION_H
 
-#include "Ball.h"
-#include "Grid.h"
+#include "Types.h"
+#include "Config.h"
+#include "GPUManager.h"
+#include "Renderer.h"
 #include <vector>
-#include <memory>
 #include <thread>
 #include <atomic>
-#include <tbb/concurrent_vector.h>
+#include <mutex>
+
+namespace sim {
 
 class Simulation {
 public:
@@ -16,20 +19,43 @@ public:
 
     void start();
     void stop();
-    void update(float dt);
-    const tbb::concurrent_vector<Ball*>& getBalls() const;
+    void pause() { paused = true; }
+    void resume() { paused = false; }
+    bool isPaused() const { return paused; }
+    bool shouldClose() const { return renderer.shouldClose(); }
 
 private:
-    void simulationLoop();
+    void initializeBalls(int numBalls);
+    void physicsLoop();
+    void renderLoop();
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
-    float screenWidth_, screenHeight_;
-    Grid grid_;
-    std::vector<std::unique_ptr<Ball>> ballsStorage_; // Unique ownership
-    tbb::concurrent_vector<Ball*> balls_;             // Thread-safe access
-    std::thread simulationThread_;
-    std::atomic<bool> running_;
-    float dt_;
+    // Core components
+    SimConstants constants;
+    GPUManager gpuManager;
+    Renderer renderer;
+
+    // Thread management
+    std::atomic<bool> running{false};
+    std::atomic<bool> paused{false};
+    std::thread physicsThread;
+    std::thread renderThread;
+
+    // Scene dimensions
+    float screenWidth;
+    float screenHeight;
+
+    // Balls data
+    std::vector<Ball> balls;
+
+    // Constants
+    static constexpr float PHYSICS_RATE = config::Physics::RATE;
+    static constexpr float DISPLAY_RATE = config::Display::TARGET_FPS;
+    static constexpr float PHYSICS_DT = 1.0f / PHYSICS_RATE;
+    static constexpr float DISPLAY_DT = 1.0f / DISPLAY_RATE;
 };
 
-#endif // SIMULATION_H
+} // namespace sim
+
+#endif // BOUNCING_BALLS_SIMULATION_H
 

@@ -1,46 +1,61 @@
 cmake_minimum_required(VERSION 3.10)
-cmake_policy(SET CMP0072 NEW)
-set(OpenGL_GL_PREFERENCE GLVND)
+project(bouncing_balls)
 
-project(BouncingBallsSimulation)
-
-# Set C++17 standard
+# Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required packages
 find_package(OpenGL REQUIRED)
-find_package(glfw3 3.3 REQUIRED)
+find_package(OpenCL REQUIRED)
 find_package(GLEW REQUIRED)
-find_package(TBB REQUIRED)
+find_package(glfw3 3.3 REQUIRED)
+# Remove or comment out the GLUT find_package
+# find_package(GLUT REQUIRED)
+
+# Add executable
+add_executable(bouncing_balls
+    src/main.cpp
+    src/GPUManager.cpp
+    src/Renderer.cpp
+    src/Simulation.cpp
+)
 
 # Include directories
-include_directories(
-    ${OPENGL_INCLUDE_DIRS}
-    ${GLEW_INCLUDE_DIRS}
-    ${TBB_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/include
+target_include_directories(bouncing_balls
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${OpenCL_INCLUDE_DIRS}
+        ${GLEW_INCLUDE_DIRS}
+        # Remove or comment out GLUT include dirs
+        # ${GLUT_INCLUDE_DIRS}
 )
-
-# Source files
-set(SOURCE_FILES
-    src/main.cpp
-    src/Ball.cpp
-    src/Simulation.cpp
-    src/Renderer.cpp
-    src/Grid.cpp
-)
-
-# Create executable
-add_executable(BouncingBallsSimulation ${SOURCE_FILES})
 
 # Link libraries
-target_link_libraries(BouncingBallsSimulation
-    ${OPENGL_LIBRARIES}
-    glfw
-    ${GLEW_LIBRARIES}
-    TBB::tbb
+target_link_libraries(bouncing_balls
+    PRIVATE
+        OpenGL::GL
+        OpenCL::OpenCL
+        GLEW::GLEW
+        glfw
+        # Remove or comment out GLUT libraries
+        # ${GLUT_LIBRARIES}
 )
+
+# Copy OpenCL kernel to build directory
+add_custom_command(
+    TARGET bouncing_balls POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+            ${CMAKE_SOURCE_DIR}/src/kernels/simulation.cl
+            ${CMAKE_CURRENT_BINARY_DIR}/simulation.cl
+)
+
+# Handle CMake policies to suppress warnings
+if(POLICY CMP0072)
+    cmake_policy(SET CMP0072 NEW)
+endif()
+
+if(POLICY CMP0074)
+    cmake_policy(SET CMP0074 NEW)
+endif()
 

@@ -1,31 +1,57 @@
-#ifndef RENDERER_H
-#define RENDERER_H
+#ifndef BOUNCING_BALLS_RENDERER_H
+#define BOUNCING_BALLS_RENDERER_H
 
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-#include <tbb/concurrent_vector.h>
+#include "Types.h"
 #include <vector>
-#include "Ball.h"
+#include <string>
+
+namespace sim {
 
 class Renderer {
 public:
     Renderer(int width, int height);
     ~Renderer();
-    Renderer(const Renderer&) = delete;
-    Renderer& operator=(const Renderer&) = delete;
 
-    bool initialize();
-    void render(const tbb::concurrent_vector<Ball*>& balls);
-    bool shouldClose();
-    int getWidth() const { return width_; }
-    int getHeight() const { return height_; }
+    bool initialize(size_t numBalls);
+    void render(const std::vector<Ball>& balls, double fps = 0.0);
+    bool shouldClose() const;
+    GLFWwindow* getWindow() const { return window; }
+
+    void setupOpenGL(); // Made public
 
 private:
-    GLFWwindow* window_;
-    int width_;
-    int height_;
-    void drawFilledCircle(float x, float y, float radius, const float* color);
+    // GLFW Context management
+    class GLFWContext {
+    public:
+        GLFWContext();
+        ~GLFWContext();
+    private:
+        GLFWContext(const GLFWContext&) = delete;
+        GLFWContext& operator=(const GLFWContext&) = delete;
+    };
+
+    static GLFWContext glfw;
+
+    void drawBalls(const std::vector<Ball>& balls);
+    void drawCircle(float x, float y, float radius, uint32_t color, float alpha);
+    void drawText(const std::string& text, float x, float y, float scale); // Added back
+    void renderFPS(double fps); // Added back
+
+    static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
+
+    GLFWwindow* window;
+    int width;
+    int height;
+
+    // Data
+    size_t numBalls;
+
+    static constexpr int CIRCLE_SEGMENTS = 32;
+    static constexpr float TEXT_SCALE = 0.15f;
+    static constexpr float PI = 3.14159265358979323846f;
 };
 
-#endif // RENDERER_H
+} // namespace sim
+
+#endif // BOUNCING_BALLS_RENDERER_H
 
