@@ -2,10 +2,12 @@
 #define SIMULATION_H
 
 #include "Ball.h"
+#include "Grid.h"
 #include <vector>
 #include <memory>
 #include <thread>
 #include <atomic>
+#include <tbb/concurrent_vector.h>
 
 class Simulation {
 public:
@@ -14,16 +16,19 @@ public:
 
     void start();
     void stop();
-    const std::vector<std::unique_ptr<Ball>>& getBalls() const;
+    void update(float dt);
+    const tbb::concurrent_vector<Ball*>& getBalls() const;
 
 private:
-    void updateLoop();
-    void update(float dt);
+    void simulationLoop();
 
-    std::atomic<bool> running_;
     float screenWidth_, screenHeight_;
-    std::vector<std::unique_ptr<Ball>> balls_;
+    Grid grid_;
+    std::vector<std::unique_ptr<Ball>> ballsStorage_; // Unique ownership
+    tbb::concurrent_vector<Ball*> balls_;             // Thread-safe access
     std::thread simulationThread_;
+    std::atomic<bool> running_;
+    float dt_;
 };
 
 #endif // SIMULATION_H
